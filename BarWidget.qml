@@ -18,6 +18,7 @@ Panel {
   property var screens: []
   property bool anyOnWallpaper: false
   property var barHiddenScreens: []
+  property string barSupport: "unknown"   //? supported | unsupported | missing
   //? Width of one switch, so the legend lines up with the switches below it
   property real switchWidth: metricsSwitch.implicitWidth
 
@@ -27,6 +28,7 @@ Panel {
   function refresh() {
     if (!statusProc.running) statusProc.running = true
     if (!barStateProc.running) barStateProc.running = true
+    if (!barSupportProc.running) barSupportProc.running = true
   }
 
   function barShownOn(name) {
@@ -85,6 +87,15 @@ Panel {
           root.barHiddenScreens = []
         }
       }
+    }
+  }
+
+  //? Only a bar that reads bar.hiddenScreens can be hidden per screen
+  Process {
+    id: barSupportProc
+    command: [Quickshell.env("HOME") + "/.config/omarchy/plugins/ure.btop/scripts/bar-support", "status"]
+    stdout: StdioCollector {
+      onStreamFinished: root.barSupport = this.text.trim()
     }
   }
 
@@ -178,6 +189,7 @@ Panel {
               horizontalAlignment: Text.AlignHCenter
               textFormat: Text.PlainText
               text: "bar"
+              visible: root.barSupport === "supported"
               color: Qt.darker(root.barForeground, 1.4)
               font.family: Style.font.family
               font.pixelSize: Style.font.caption
@@ -219,11 +231,23 @@ Panel {
 
               ToggleSwitch {
                 foreground: root.barForeground
+                visible: root.barSupport === "supported"
                 checked: root.barShownOn(modelData.name)
                 onToggled: root.run(root.scripts + "/bar-screen toggle " + modelData.name)
               }
             }
           }
+        }
+
+        Button {
+          width: parent.width
+          visible: root.barSupport === "unsupported"
+          foreground: root.barForeground
+          bordered: true
+          iconText: "󰍜"
+          text: "Enable per-screen bars"
+          tooltipText: "Clones Omarchy's bar and teaches it to skip chosen screens"
+          onClicked: root.run(root.scripts + "/bar-support install && omarchy restart shell")
         }
 
         PanelSeparator {

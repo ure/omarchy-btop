@@ -30,6 +30,14 @@ Then add the window rule to `~/.config/hypr/hyprland.lua`:
 dofile(os.getenv("HOME") .. "/.config/omarchy/plugins/ure.btop/hypr/windows.lua")
 ```
 
+For the per-screen bar switches, let it patch a clone of the bar (skip this if you are
+happy with the bar on every screen):
+
+```bash
+~/.config/omarchy/plugins/ure.btop/scripts/bar-support install
+omarchy restart shell
+```
+
 And add the menu row:
 
 ```bash
@@ -43,10 +51,15 @@ And add the menu row:
     (the wide short ones are marked, and start out on)
   - **a bar switch beside it**, one per screen, hiding or showing Omarchy's bar on that
     monitor alone. With the bar gone that screen reserves nothing, so btop grows into
-    the freed space. This drives `bar.hiddenScreens` in `shell.json`, which a cloned
-    bar can filter its screens on; the stock `omarchy.bar` ignores it and draws
-    everywhere. `scripts/bar-screen [toggle|show|hide] <monitor>` does the same from a
-    keybinding.
+    the freed space. `scripts/bar-screen [toggle|show|hide] <monitor>` does the same
+    from a keybinding.
+
+  Omarchy's own bar draws on every screen, so the first time the panel offers
+  **Enable per-screen bars**: it clones the stock bar into your own plugins, the way
+  `omarchy plugin clone` does, and teaches the clone to skip the screens listed in
+  `bar.hiddenScreens`. The packaged bar is never touched, and a bar already able to do
+  this is left alone. `scripts/bar-support [status|install]` is the same thing from a
+  terminal.
   - **a transparency slider** for how much wallpaper shows through btop
   - **Open as a window**, the same as right clicking the icon
 
