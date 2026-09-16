@@ -1,10 +1,14 @@
 #!/bin/bash
-# Run btop sized to a whole monitor, in a layout picked from that monitor's shape.
+# Run btop filling a monitor, in a layout picked from that monitor's shape.
 #
 # Wide and short screens (a Corsair Xeneon Edge is 2560x720) get the wide layout:
 # every box as a full height column, side by side. Regular monitors get btop's
 # normal stacked layout. Needs a btop build that has the wide_layout option for
 # the first case; falls back to the stacked layout when it is missing.
+#
+# The window covers the monitor's usable area, which is the monitor minus
+# whatever a bar reserves on it, so nothing hides under the bar on screens that
+# have one and the whole screen is used on those that do not.
 
 set -euo pipefail
 
@@ -12,15 +16,13 @@ CONF_DIR="$HOME/.config/btop"
 THEMES_DIR="$CONF_DIR/themes"
 APP_ID="org.omarchy.btop-screen"
 
-MONITOR=""
+MONITOR="auto"
 LAYOUT="auto"
 IF_RUNNING="focus"
 
 # Defaults; override any of these in ~/.config/btop/ure-btop.env
 DIM="0.7"          # how much to darken btop's light text, 1 = leave it alone
-ALPHA=""           # terminal background opacity, 1 = opaque.
-                   # Empty means see-through over a wallpaper on wide screens,
-                   # opaque on regular monitors where windows sit behind it.
+ALPHA="0.85"       # terminal background opacity, 1 = opaque
 FONT="JetBrainsMono Nerd Font"
 MAX_FONT_SIZE="9"  # never bigger than this, smaller only when btop's menus need it
 MIN_COLS="80"      # btop refuses to open its menus below 80x24
@@ -31,11 +33,12 @@ BTOP_BIN=""
 
 usage() {
   cat <<'USAGE'
-Usage: btop-screen [--monitor <name>] [--layout auto|wide|standard] [--if-running focus|exit]
+Usage: btop-screen [--monitor <name>|auto|focused] [--layout auto|wide|standard] [--if-running focus|exit]
 
-  --monitor     Monitor to use, as named by `hyprctl monitors` (default: the focused one)
+  --monitor     Monitor to cover, as named by `hyprctl monitors`. auto (the default)
+                prefers a wide short screen when one is connected, else the focused one
   --layout      auto picks wide on short wide screens, standard elsewhere (default: auto)
-  --if-running  What to do when a btop screen is already open (default: focus)
+  --if-running  What to do when that monitor already shows one (default: focus)
 USAGE
 }
 
@@ -64,19 +67,37 @@ hypr_focus_window() {
     || hyprctl dispatch focuswindow "address:$1" >/dev/null 2>&1 || true
 }
 
-#? The monitor to cover, and its size in logical pixels
+#? The monitor to cover. Without a name, take a wide short screen when one is
+#? connected — that is the one worth filling — and otherwise the focused monitor.
 monitors_json="$(hyprctl monitors -j)"
-if [[ -n $MONITOR ]]; then
-  monitor="$(jq -e --arg n "$MONITOR" '[.[] | select(.name == $n)][0]' <<<"$monitors_json")" \
-    || { echo "btop-screen: no monitor named $MONITOR" >&2; exit 1; }
-else
-  monitor="$(jq -e '[.[] | select(.focused)][0]' <<<"$monitors_json")" \
-    || { echo "btop-screen: no focused monitor" >&2; exit 1; }
-fi
+case "$MONITOR" in
+  auto)
+    monitor="$(jq -e '
+      [.[] | select(((.width / .scale) >= (.height / .scale) * 2.2) or ((.height / .scale) < 600))][0]
+      // [.[] | select(.focused)][0]
+    ' <<<"$monitors_json")" || { echo "btop-screen: no monitor found" >&2; exit 1; }
+    ;;
+  focused)
+    monitor="$(jq -e '[.[] | select(.focused)][0]' <<<"$monitors_json")" \
+      || { echo "btop-screen: no focused monitor" >&2; exit 1; }
+    ;;
+  *)
+    monitor="$(jq -e --arg n "$MONITOR" '[.[] | select(.name == $n)][0]' <<<"$monitors_json")" \
+      || { echo "btop-screen: no monitor named $MONITOR" >&2; exit 1; }
+    ;;
+esac
+
 monitor_name="$(jq -r '.name' <<<"$monitor")"
 monitor_id="$(jq -r '.id' <<<"$monitor")"
-width="$(jq -r '(.width / .scale) | floor' <<<"$monitor")"
-height="$(jq -r '(.height / .scale) | floor' <<<"$monitor")"
+
+#? Usable box in logical pixels: the monitor minus what a bar reserves on it.
+#? reserved is [left, top, right, bottom], all zero on a screen without a bar.
+read -r area_x area_y width height <<<"$(jq -r '
+  (.reserved // [0, 0, 0, 0]) as $r
+  | ((.width / .scale) | floor) as $w
+  | ((.height / .scale) | floor) as $h
+  | "\(.x + $r[0]) \(.y + $r[1]) \($w - $r[0] - $r[2]) \($h - $r[1] - $r[3])"
+' <<<"$monitor")"
 
 #? btop binary; the wide layout needs a build that knows the wide_layout option
 BTOP=""
@@ -87,7 +108,7 @@ done
 has_wide="no"
 if "$BTOP" --default-config 2>/dev/null | grep -q '^wide_layout'; then has_wide="yes"; fi
 
-#? Layout: columns once a screen is over ~2.2 times wider than tall, or very short
+#? Layout: columns once the usable area is over ~2.2 times wider than tall, or very short
 if [[ $LAYOUT == auto ]]; then
   if (( width * 10 >= height * 22 || height < 600 )); then LAYOUT="wide"; else LAYOUT="standard"; fi
 fi
@@ -159,14 +180,10 @@ if [[ -n $existing ]]; then
 fi
 
 #? Open it on the wanted monitor by focusing that monitor first, then handing
-#? focus back once the window is up. The size and placement come from the
+#? focus back once the window is up. Placement comes from the
 #? org.omarchy.btop-screen window rule in hypr/windows.lua.
 previous="$(jq -r '[.[] | select(.focused)][0].name' <<<"$monitors_json")"
 if [[ $monitor_name != "$previous" ]]; then hypr_focus_monitor "$monitor_name"; fi
-
-if [[ -z $ALPHA ]]; then
-  if [[ $LAYOUT == wide ]]; then ALPHA="0.85"; else ALPHA="1"; fi
-fi
 
 launch=(foot --app-id="$APP_ID"
   -o "font=$FONT:size=$font_size"
@@ -179,11 +196,19 @@ else
   setsid "${launch[@]}" >/dev/null 2>&1 &
 fi
 
-if [[ $monitor_name != "$previous" ]]; then
-  for _ in $(seq 1 40); do
-    if hyprctl clients -j | jq -e --arg id "$APP_ID" --argjson mon "$monitor_id" \
-      'any(.[]; .class == $id and .monitor == $mon)' >/dev/null; then break; fi
-    sleep 0.1
-  done
-  hypr_focus_monitor "$previous"
+#? The window rule sizes it to the whole monitor, which tucks the top of btop
+#? under a bar, so set the usable box exactly once the window is up.
+address=""
+for _ in $(seq 1 60); do
+  address="$(hyprctl clients -j | jq -r --arg id "$APP_ID" --argjson mon "$monitor_id" \
+    '[.[] | select(.class == $id and .monitor == $mon)][0].address // empty')"
+  [[ -n $address ]] && break
+  sleep 0.1
+done
+
+if [[ -n $address ]]; then
+  hyprctl dispatch "hl.dsp.window.resize({ window = \"address:$address\", x = $width, y = $height, exact = true })" >/dev/null 2>&1 || true
+  hyprctl dispatch "hl.dsp.window.move({ window = \"address:$address\", x = $area_x, y = $area_y, exact = true })" >/dev/null 2>&1 || true
 fi
+
+if [[ $monitor_name != "$previous" ]]; then hypr_focus_monitor "$previous"; fi
