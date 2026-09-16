@@ -102,7 +102,8 @@ read -r area_x area_y width height <<<"$(jq -r '
 
 #? btop binary; the wide layout needs a build that knows the wide_layout option
 BTOP=""
-for candidate in "$BTOP_BIN" "$HOME/Git/ure/btop/bin/btop" "$(command -v btop || true)"; do
+#? The plugin's own build first, then whatever btop is on PATH
+for candidate in "$BTOP_BIN" "$HOME/.local/share/ure.btop/bin/btop" "$(command -v btop || true)"; do
   if [[ -n $candidate && -x $candidate ]]; then BTOP="$candidate"; break; fi
 done
 [[ -n $BTOP ]] || { echo "btop-screen: btop not found" >&2; exit 1; }

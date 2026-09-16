@@ -1,0 +1,174 @@
+diff --git a/README.md b/README.md
+index 9b0c293..4efaaf8 100644
+--- a/README.md
++++ b/README.md
+@@ -1447,6 +1447,9 @@ cpu_single_graph = false
+ #* Show cpu box at bottom of screen instead of top.
+ cpu_bottom = false
+ 
++#* Show all boxes side by side as full height columns, for wide and short screens.
++wide_layout = false
++
+ #* Shows the system uptime in the CPU box.
+ show_uptime = true
+ 
+diff --git a/src/btop_config.cpp b/src/btop_config.cpp
+index 3f0b0b0..6bf6bdd 100644
+--- a/src/btop_config.cpp
++++ b/src/btop_config.cpp
+@@ -168,6 +168,8 @@ namespace Config {
+ 
+ 		{"cpu_bottom",			"#* Show cpu box at bottom of screen instead of top."},
+ 
++		{"wide_layout",			"#* Show all boxes side by side as full height columns, for wide and short screens."},
++
+ 		{"show_uptime", 		"#* Shows the system uptime in the CPU box."},
+ 
+ 		{"show_cpu_watts",		"#* Shows the CPU package current power consumption in watts. Requires running `make setcap` or `make setuid` or running with sudo."},
+@@ -331,6 +333,7 @@ namespace Config {
+ 		{"cpu_invert_lower", true},
+ 		{"cpu_single_graph", false},
+ 		{"cpu_bottom", false},
++		{"wide_layout", false},
+ 		{"show_uptime", true},
+ 		{"show_cpu_watts", true},
+ 		{"check_temp", true},
+diff --git a/src/btop_draw.cpp b/src/btop_draw.cpp
+index 1c3b1bc..8dc7d91 100644
+--- a/src/btop_draw.cpp
++++ b/src/btop_draw.cpp
+@@ -2303,6 +2303,38 @@ namespace Draw {
+ 		Net::shown = boxes.contains("net");
+ 		Proc::shown = boxes.contains("proc");
+ 
++		//* Wide layout: every shown box gets a full height column, spare width is shared out by weight
++		const bool wide_layout = Config::getB("wide_layout");
++		struct Column { int count, min_width, weight, x = 1, width = 0; };
++		Column cpu_col{Cpu::shown, Cpu::min_width, 3}, mem_col{Mem::shown, Mem::min_width, 2};
++		Column net_col{Net::shown, Net::min_width, 2}, proc_col{Proc::shown, Proc::min_width, 3};
++	#ifdef GPU_SUPPORT
++		Column gpu_col{Gpu::shown, Gpu::min_width, 2};
++		const array columns{&cpu_col, &gpu_col, &mem_col, &net_col, &proc_col};
++	#else
++		const array columns{&cpu_col, &mem_col, &net_col, &proc_col};
++	#endif
++		if (wide_layout) {
++			int min_total = 0, weight_total = 0;
++			for (const auto* col : columns) {
++				min_total += col->count * col->min_width;
++				weight_total += col->count * col->weight;
++			}
++			const int extra = max(0, Term::width - min_total);
++			int next_x = 1;
++			Column* last = nullptr;
++			for (auto* col : columns) {
++				if (col->count == 0) continue;
++				col->x = next_x;
++				col->width = col->min_width + extra * col->weight / weight_total;
++				next_x += col->count * col->width;
++				last = col;
++			}
++			//? Hand rounding leftovers to the last column
++			if (last != nullptr and last->count == 1)
++				last->width += max(0, Term::width + 1 - next_x);
++		}
++
+ 		//* Calculate and draw cpu box outlines
+ 		if (Cpu::shown) {
+ 			using namespace Cpu;
+@@ -2327,6 +2359,10 @@ namespace Draw {
+ 		#endif
+ 			x = 1;
+ 			y = cpu_bottom ? Term::height - height + 1 : 1;
++			if (wide_layout) {
++				x = cpu_col.x; y = 1;
++				width = cpu_col.width; height = Term::height;
++			}
+ 
+ 		#ifdef GPU_SUPPORT
+ 			b_columns = max(2, (int)ceil((double)(Shared::coreCount + 1) / (height - gpus_extra_height - 5)));
+@@ -2410,6 +2446,10 @@ namespace Draw {
+ 				height += (height+Cpu::height == Term::height-1);
+ 				height = max(height, b_height_vec[i] + 2);
+ 				x_vec[i] = 1; y_vec[i] = 1 + total_height + (not Config::getB("cpu_bottom"))*Cpu::shown*Cpu::height;
++				if (wide_layout) {
++					width = gpu_col.width; height = Term::height;
++					x_vec[i] = gpu_col.x + i * gpu_col.width; y_vec[i] = 1;
++				}
+ 				box[i] = createBox(x_vec[i], y_vec[i], width, height, Theme::c("cpu_box"), true, std::string("gpu") + (char)(shown_panels[i]+'0'), "", (shown_panels[i]+5)%10); // TODO gpu_box
+ 				b_width = clamp(width/2, min_width, 65);
+ 				total_height += height;
+@@ -2451,6 +2491,10 @@ namespace Draw {
+ 			else
+ 				y = cpu_bottom ? 1 : Cpu::height + 1;
+ 		#endif
++			if (wide_layout) {
++				x = mem_col.x; y = 1;
++				width = mem_col.width; height = Term::height;
++			}
+ 
+ 			if (show_disks) {
+ 				mem_width = ceil((double)(width - 3) / 2);
+@@ -2514,6 +2558,11 @@ namespace Draw {
+ 			else
+ 				y = Term::height - height + 1 - (cpu_bottom ? Cpu::height : 0);
+ 
++			if (wide_layout) {
++				x = net_col.x; y = 1;
++				width = net_col.width; height = Term::height;
++			}
++
+ 			b_width = (width > 45) ? 27 : 19;
+ 			b_height = (height > 10) ? 9 : height - 2;
+ 			b_x = x + width - b_width - 1;
+@@ -2545,6 +2594,10 @@ namespace Draw {
+ 			y = (cpu_bottom and Cpu::shown) ? 1 : Cpu::height + 1;
+ 		#endif
+ 			select_max = height - 3;
++			if (wide_layout) {
++				x = proc_col.x; y = 1;
++				width = proc_col.width; height = Term::height;
++			}
+ 			box = createBox(x, y, width, height, Theme::c("proc_box"), true, "proc", "", 4);
+ 		}
+ 	}
+diff --git a/src/btop_menu.cpp b/src/btop_menu.cpp
+index bcb64bf..dd90882 100644
+--- a/src/btop_menu.cpp
++++ b/src/btop_menu.cpp
+@@ -303,6 +303,13 @@ namespace Menu {
+ 				"Separate values with whitespace.",
+ 				"",
+ 				"Toggle between presets with key \"p\"."},
++			{"wide_layout",
++				"Wide layout.",
++				"",
++				"Show all boxes side by side as full",
++				"height columns instead of stacked.",
++				"",
++				"Made for wide and short screens."},
+ 			{"update_ms",
+ 				"Update time in milliseconds.",
+ 				"",
+diff --git a/src/btop_tools.cpp b/src/btop_tools.cpp
+index f0e0de6..05bce2f 100644
+--- a/src/btop_tools.cpp
++++ b/src/btop_tools.cpp
+@@ -127,6 +127,17 @@ namespace Term {
+         	for (char i = '0'; i <= '5'; i++)
+         		gpu += (boxes.contains("gpu"s + i) ? 1 : 0);
+ 	#endif
++		if (Config::getB("wide_layout")) {
++			//? Boxes are placed side by side as full height columns
++			int width = (cpu ? Cpu::min_width : 0) + (mem ? Mem::min_width : 0) + (net ? Net::min_width : 0) + (proc ? Proc::min_width : 0);
++			int height = std::max<int>({cpu ? Cpu::min_height : 0, mem ? Mem::min_height : 0, net ? Net::min_height : 0, proc ? Proc::min_height : 0});
++		#ifdef GPU_SUPPORT
++			width += gpu * Gpu::min_width;
++			for (int i = 0; i < gpu; i++)
++				height = std::max<int>(height, Gpu::gpu_b_height_offsets[i] + 4);
++		#endif
++			return { width, height };
++		}
+         int width = 0;
+ 		if (mem) width = Mem::min_width;
+ 		else if (net) width = Mem::min_width;

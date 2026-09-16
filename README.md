@@ -13,15 +13,24 @@ monitor, choosing the layout from that monitor's shape.
 
 ## Requirements
 
-- Omarchy with Hyprland, plus `foot`, `jq` and `awk`
-- For the column layout, a btop build with the `wide_layout` option
-  ([ure/btop, branch wide-layout](https://github.com/ure/btop/tree/wide-layout)). Without
-  it the plugin falls back to the stacked layout.
+- Omarchy with Hyprland, plus `foot`, `jq`, `awk` and `tmux`
+- For the column layout, a btop that has the `wide_layout` option. The plugin builds its
+  own with `scripts/btop-build` (needs `git`, `make` and a C++ compiler) and installs it
+  under `~/.local/share/ure.btop`, leaving the system btop alone. Without that build it
+  falls back to btop's stacked layout.
+  The change itself is `patches/wide-layout.patch`, against
+  [ure/btop](https://github.com/ure/btop/tree/wide-layout).
 
 ## Install
 
 ```bash
 omarchy plugin add https://github.com/ure/omarchy-btop.git --enable --yes
+```
+
+Build the btop that has the column layout (skip it to stay on btop's stacked layout):
+
+```bash
+~/.config/omarchy/plugins/ure.btop/scripts/btop-build
 ```
 
 Then add the window rule to `~/.config/hypr/hyprland.lua`:
@@ -91,11 +100,11 @@ And add the menu row:
 Defaults can be overridden in `~/.config/btop/ure-btop.env`:
 
 ```bash
+BTOP_BIN=          # a specific btop binary, ahead of the plugin's own build
 DIM=0.7            # how much to darken btop's light text, 1 = leave it alone
 ALPHA=1            # window background opacity, 1 = opaque (the wallpaper mode is the see-through one)
 FONT="JetBrainsMono Nerd Font"
 MAX_FONT_SIZE=9    # never bigger than this
-BTOP_BIN=          # path to a specific btop build
 ```
 
 btop's own settings live in `~/.config/btop/ure-btop-wide.conf` and

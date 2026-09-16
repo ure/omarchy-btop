@@ -53,7 +53,8 @@ if [[ $ACTION == stop ]]; then
 fi
 
 BTOP=""
-for candidate in "$BTOP_BIN" "$HOME/Git/ure/btop/bin/btop" "$(command -v btop || true)"; do
+#? The plugin's own build first, then whatever btop is on PATH
+for candidate in "$BTOP_BIN" "$HOME/.local/share/ure.btop/bin/btop" "$(command -v btop || true)"; do
   if [[ -n $candidate && -x $candidate ]]; then BTOP="$candidate"; break; fi
 done
 [[ -n $BTOP ]] || { echo "btop-frame: btop not found" >&2; exit 1; }

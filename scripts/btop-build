@@ -1,0 +1,71 @@
+#!/bin/bash
+# Build a btop that has the wide_layout option, for this plugin's own use.
+#
+# The column layout needs a btop built from the wide-layout branch; distro
+# packages do not have it. This fetches that branch and installs the result
+# under ~/.local/share/ure.btop, which the plugin's scripts look for first.
+# Nothing outside that directory is touched, and the system btop stays put.
+#
+#   btop-build            build and install, skipping a build that is current
+#   btop-build --force    build again even when the installed one is current
+#   btop-build --status   say what is installed without building anything
+
+set -euo pipefail
+
+PREFIX="$HOME/.local/share/ure.btop"
+BUILD_DIR="${XDG_CACHE_HOME:-$HOME/.cache}/ure.btop/src"
+REPO="${BTOP_REPO:-https://github.com/ure/btop.git}"
+REF="${BTOP_REF:-wide-layout}"
+
+ACTION="build"
+case "${1:-}" in
+  --force) ACTION="force" ;;
+  --status) ACTION="status" ;;
+  -h|--help) sed -n '2,12p' "$0" | sed 's/^# \?//'; exit 0 ;;
+  "") ;;
+  *) echo "btop-build: unknown argument: $1" >&2; exit 1 ;;
+esac
+
+installed_has_wide() {
+  [[ -x "$PREFIX/bin/btop" ]] && "$PREFIX/bin/btop" --default-config 2>/dev/null | grep -q '^wide_layout'
+}
+
+if [[ $ACTION == status ]]; then
+  if installed_has_wide; then
+    echo "installed: $("$PREFIX/bin/btop" --version 2>/dev/null | head -1) at $PREFIX/bin/btop"
+  else
+    echo "not installed"
+  fi
+  exit 0
+fi
+
+if [[ $ACTION == build ]] && installed_has_wide; then
+  echo "btop-build: already installed at $PREFIX/bin/btop, use --force to rebuild"
+  exit 0
+fi
+
+for tool in git make g++; do
+  command -v "$tool" >/dev/null || { echo "btop-build: $tool is required" >&2; exit 1; }
+done
+
+mkdir -p "$(dirname "$BUILD_DIR")"
+if [[ -d "$BUILD_DIR/.git" ]]; then
+  echo "btop-build: updating $BUILD_DIR"
+  git -C "$BUILD_DIR" fetch --depth 1 origin "$REF"
+  git -C "$BUILD_DIR" checkout -q FETCH_HEAD
+else
+  echo "btop-build: cloning $REPO ($REF)"
+  rm -rf "$BUILD_DIR"
+  git clone --depth 1 --branch "$REF" "$REPO" "$BUILD_DIR"
+fi
+
+echo "btop-build: compiling, this takes a couple of minutes"
+make -C "$BUILD_DIR" -j"$(nproc)"
+make -C "$BUILD_DIR" install PREFIX="$PREFIX"
+
+if installed_has_wide; then
+  echo "btop-build: installed $PREFIX/bin/btop with the wide layout"
+else
+  echo "btop-build: built, but the result has no wide_layout option" >&2
+  exit 1
+fi
