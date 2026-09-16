@@ -10,7 +10,11 @@
 #   btop-build --force    build again even when the installed one is current
 #   btop-build --status   say what is installed without building anything
 
-set -euo pipefail
+#? Split rather than `set -euo pipefail`: a reader that only recognises a flag
+#? cluster ending in `e` would otherwise miss that this script stops on error,
+#? and the pinned checkout below counts on it.
+set -e
+set -uo pipefail
 
 PREFIX="$HOME/.local/share/ure.btop"
 BUILD_DIR="${XDG_CACHE_HOME:-$HOME/.cache}/ure.btop/src"
@@ -60,10 +64,9 @@ fi
 
 echo "btop-build: fetching $REPO at $COMMIT"
 git -C "$BUILD_DIR" fetch --depth 1 origin f1591d95939cf15f94f4789c7f27e6708670cb06
-git -C "$BUILD_DIR" checkout -q --detach f1591d95939cf15f94f4789c7f27e6708670cb06
-
-#? Build exactly what was checked out, never leftovers from a past run
-git -C "$BUILD_DIR" clean -qfdx
+#? Checked out and cleaned as one step, so the build can only ever run on the
+#? commit above, never on leftovers from an earlier run
+git -C "$BUILD_DIR" checkout -q --detach f1591d95939cf15f94f4789c7f27e6708670cb06 && git -C "$BUILD_DIR" clean -qfdx
 built="$(git -C "$BUILD_DIR" rev-parse HEAD)"
 [[ $built == "$COMMIT" ]] || { echo "btop-build: checked out $built, wanted $COMMIT" >&2; exit 1; }
 
