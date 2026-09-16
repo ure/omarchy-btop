@@ -1,0 +1,169 @@
+#!/bin/bash
+# Run btop sized to a whole monitor, in a layout picked from that monitor's shape.
+#
+# Wide and short screens (a Corsair Xeneon Edge is 2560x720) get the wide layout:
+# every box as a full height column, side by side. Regular monitors get btop's
+# normal stacked layout. Needs a btop build that has the wide_layout option for
+# the first case; falls back to the stacked layout when it is missing.
+
+set -euo pipefail
+
+CONF_DIR="$HOME/.config/btop"
+THEMES_DIR="$CONF_DIR/themes"
+APP_ID="org.omarchy.btop-screen"
+
+MONITOR=""
+LAYOUT="auto"
+IF_RUNNING="focus"
+
+# Defaults; override any of these in ~/.config/btop/ure-btop.env
+DIM="0.7"          # how much to darken btop's light text, 1 = leave it alone
+ALPHA="0.85"       # terminal background opacity, 1 = opaque
+FONT="JetBrainsMono Nerd Font"
+MAX_FONT_SIZE="9"  # never bigger than this, smaller only when btop's menus need it
+MIN_COLS="80"      # btop refuses to open its menus below 80x24
+MIN_ROWS="24"
+BTOP_BIN=""
+# shellcheck source=/dev/null
+[[ -f "$CONF_DIR/ure-btop.env" ]] && . "$CONF_DIR/ure-btop.env"
+
+usage() {
+  cat <<'USAGE'
+Usage: btop-screen [--monitor <name>] [--layout auto|wide|standard] [--if-running focus|exit]
+
+  --monitor     Monitor to use, as named by `hyprctl monitors` (default: the focused one)
+  --layout      auto picks wide on short wide screens, standard elsewhere (default: auto)
+  --if-running  What to do when a btop screen is already open (default: focus)
+USAGE
+}
+
+while [[ $# -gt 0 ]]; do
+  case "$1" in
+    --monitor) MONITOR="${2:-}"; shift 2 ;;
+    --layout) LAYOUT="${2:-}"; shift 2 ;;
+    --if-running) IF_RUNNING="${2:-}"; shift 2 ;;
+    -h|--help) usage; exit 0 ;;
+    *) echo "btop-screen: unknown argument: $1" >&2; usage >&2; exit 1 ;;
+  esac
+done
+
+for tool in hyprctl jq foot awk; do
+  command -v "$tool" >/dev/null || { echo "btop-screen: $tool is required" >&2; exit 1; }
+done
+
+#? The monitor to cover, and its size in logical pixels
+monitors_json="$(hyprctl monitors -j)"
+if [[ -n $MONITOR ]]; then
+  monitor="$(jq -e --arg n "$MONITOR" '[.[] | select(.name == $n)][0]' <<<"$monitors_json")" \
+    || { echo "btop-screen: no monitor named $MONITOR" >&2; exit 1; }
+else
+  monitor="$(jq -e '[.[] | select(.focused)][0]' <<<"$monitors_json")" \
+    || { echo "btop-screen: no focused monitor" >&2; exit 1; }
+fi
+monitor_name="$(jq -r '.name' <<<"$monitor")"
+width="$(jq -r '(.width / .scale) | floor' <<<"$monitor")"
+height="$(jq -r '(.height / .scale) | floor' <<<"$monitor")"
+
+#? btop binary; the wide layout needs a build that knows the wide_layout option
+BTOP=""
+for candidate in "$BTOP_BIN" "$HOME/Git/ure/btop/bin/btop" "$(command -v btop || true)"; do
+  if [[ -n $candidate && -x $candidate ]]; then BTOP="$candidate"; break; fi
+done
+[[ -n $BTOP ]] || { echo "btop-screen: btop not found" >&2; exit 1; }
+has_wide="no"
+if "$BTOP" --default-config 2>/dev/null | grep -q '^wide_layout'; then has_wide="yes"; fi
+
+#? Layout: columns once a screen is over ~2.2 times wider than tall, or very short
+if [[ $LAYOUT == auto ]]; then
+  if (( width * 10 >= height * 22 || height < 600 )); then LAYOUT="wide"; else LAYOUT="standard"; fi
+fi
+if [[ $LAYOUT == wide && $has_wide == no ]]; then
+  echo "btop-screen: this btop has no wide_layout option, using the stacked layout" >&2
+  LAYOUT="standard"
+fi
+
+#? Font size: foot cells measure about 0.82 x 1.88 times the font size in pixels.
+#? Take the largest size that still leaves btop enough room to open its menus.
+font_size="$(awk -v w="$width" -v h="$height" -v max="$MAX_FONT_SIZE" -v cols="$MIN_COLS" -v rows="$MIN_ROWS" '
+  BEGIN {
+    for (size = max; size >= 4; size -= 0.5) {
+      if (int(w / (0.82 * size)) >= cols && int(h / (1.88 * size)) >= rows) { print size; exit }
+    }
+    print 4
+  }')"
+
+#? A config per layout, kept apart from the user's own btop.conf
+mkdir -p "$CONF_DIR" "$THEMES_DIR"
+conf="$CONF_DIR/ure-btop-$LAYOUT.conf"
+if [[ ! -f $conf ]]; then
+  if [[ $LAYOUT == wide && -f "$CONF_DIR/edge.conf" ]]; then
+    cp "$CONF_DIR/edge.conf" "$conf"
+  elif [[ -f "$CONF_DIR/btop.conf" ]]; then
+    cp "$CONF_DIR/btop.conf" "$conf"
+  else
+    "$BTOP" --default-config > "$conf"
+  fi
+fi
+
+set_opt() { #? key value
+  if grep -q "^$1 = " "$conf"; then
+    sed -i "s|^$1 = .*|$1 = $2|" "$conf"
+  else
+    printf '%s = %s\n' "$1" "$2" >> "$conf"
+  fi
+}
+
+if [[ $has_wide == yes ]]; then
+  if [[ $LAYOUT == wide ]]; then set_opt wide_layout "true"; else set_opt wide_layout "false"; fi
+fi
+set_opt theme_background "false"
+
+#? The current Omarchy btop theme with its light text colors dimmed, so a
+#? see-through window over a wallpaper stays easy on the eyes.
+if [[ -f "$THEMES_DIR/current.theme" ]]; then
+  awk -v dim="$DIM" '
+    match($0, /^theme\[(main_fg|title|graph_text|proc_misc|gradient_color_[5-7])\]="#[0-9a-fA-F]{6}"/) {
+      hex = substr($0, index($0, "#") + 1, 6)
+      out = ""
+      for (i = 1; i <= 5; i += 2) out = out sprintf("%02x", int(strtonum("0x" substr(hex, i, 2)) * dim))
+      sub(/#[0-9a-fA-F]{6}/, "#" out)
+    }
+    { print }
+  ' "$THEMES_DIR/current.theme" > "$THEMES_DIR/ure-btop-dim.theme"
+  set_opt color_theme '"ure-btop-dim"'
+else
+  set_opt color_theme '"Default"'
+fi
+
+#? One btop screen at a time
+existing="$(hyprctl clients -j | jq -r --arg id "$APP_ID" '[.[] | select(.class == $id)][0].address // empty')"
+if [[ -n $existing ]]; then
+  [[ $IF_RUNNING == exit ]] && exit 0
+  hyprctl dispatch focuswindow "address:$existing" >/dev/null
+  exit 0
+fi
+
+#? Open it on the wanted monitor by focusing that monitor first, then handing
+#? focus back once the window is up. The size and placement come from the
+#? org.omarchy.btop-screen window rule in hypr/windows.lua.
+previous="$(jq -r '[.[] | select(.focused)][0].name' <<<"$monitors_json")"
+if [[ $monitor_name != "$previous" ]]; then hyprctl dispatch focusmonitor "$monitor_name" >/dev/null; fi
+
+launch=(foot --app-id="$APP_ID"
+  -o "font=$FONT:size=$font_size"
+  -o "pad=0x0 center"
+  -o "colors-dark.alpha=$ALPHA"
+  -e "$BTOP" -c "$conf" --themes-dir "$THEMES_DIR")
+if command -v uwsm-app >/dev/null; then
+  setsid uwsm-app -- "${launch[@]}" >/dev/null 2>&1 &
+else
+  setsid "${launch[@]}" >/dev/null 2>&1 &
+fi
+
+if [[ $monitor_name != "$previous" ]]; then
+  for _ in $(seq 1 40); do
+    if hyprctl clients -j | jq -e --arg id "$APP_ID" 'any(.[]; .class == $id)' >/dev/null; then break; fi
+    sleep 0.1
+  done
+  hyprctl dispatch focusmonitor "$previous" >/dev/null
+fi

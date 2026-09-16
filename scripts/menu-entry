@@ -1,0 +1,79 @@
+#!/usr/bin/env python3
+"""Add or remove this plugin's row in the user's Omarchy menu.
+
+Usage: menu-entry add|remove|status
+
+The menu lives in ~/.config/omarchy/extensions/omarchy-menu.jsonc, which is
+JSON with comments. Comments and every other row are preserved.
+"""
+import json
+import os
+import re
+import sys
+from pathlib import Path
+
+MENU = Path.home() / ".config/omarchy/extensions/omarchy-menu.jsonc"
+LAUNCHER = Path(__file__).resolve().parent / "btop-screen"
+KEY = "apps.btop"
+ENTRY = {
+    "icon": "󰍛",
+    "label": "btop",
+    "description": "System monitor filling this display",
+    "aliases": ["btop", "system monitor", "resources"],
+    "action": str(LAUNCHER),
+}
+
+COMMENT = re.compile(r"^\s*//")
+TRAILING_COMMA = re.compile(r",(\s*[}\]])")
+
+
+def load(raw):
+    """Return (comment lines, entries) from a JSONC menu file."""
+    comments = [line for line in raw.splitlines() if COMMENT.match(line)]
+    stripped = "\n".join(line for line in raw.splitlines() if not COMMENT.match(line))
+    stripped = TRAILING_COMMA.sub(r"\1", stripped).strip()
+    entries = json.loads(stripped) if stripped else {}
+    if not isinstance(entries, dict):
+        raise SystemExit("menu-entry: the menu file must hold a JSON object")
+    return comments, entries
+
+
+def dump(comments, entries):
+    body = ""
+    if entries:
+        rows = json.dumps(entries, indent=2, ensure_ascii=False)
+        body = "\n".join(rows.splitlines()[1:-1])
+    parts = ["{"]
+    parts.extend(comments)
+    if body:
+        if comments:
+            parts.append("")
+        parts.append(body)
+    parts.append("}")
+    return "\n".join(parts) + "\n"
+
+
+def main():
+    action = sys.argv[1] if len(sys.argv) > 1 else "status"
+    raw = MENU.read_text() if MENU.exists() else "{\n}\n"
+    comments, entries = load(raw)
+
+    if action == "status":
+        print("present" if KEY in entries else "absent")
+        return
+    if action == "add":
+        entries[KEY] = ENTRY
+    elif action == "remove":
+        entries.pop(KEY, None)
+    else:
+        raise SystemExit(__doc__)
+
+    MENU.parent.mkdir(parents=True, exist_ok=True)
+    tmp = MENU.with_suffix(".jsonc.tmp")
+    tmp.write_text(dump(comments, entries))
+    os.replace(tmp, MENU)
+    print(f"menu-entry: {action}ed {KEY} in {MENU}")
+
+
+if __name__ == "__main__":
+    main()
