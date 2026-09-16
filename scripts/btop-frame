@@ -1,0 +1,108 @@
+#!/bin/bash
+# Print one frame of a headless btop as Qt rich text.
+#
+# Keeps a btop running in a detached tmux session sized to the grid asked for,
+# grabs what is on its screen and hands it back as markup the background
+# surface can draw. Starting it, resizing it and reading it are all one call,
+# so the caller only has to ask for frames.
+
+set -euo pipefail
+
+SCRIPT_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
+CONF_DIR="$HOME/.config/btop"
+THEMES_DIR="$CONF_DIR/themes"
+
+SESSION=""
+COLS="120"
+ROWS="30"
+LAYOUT="wide"
+ACTION="frame"
+
+BTOP_BIN=""
+UPDATE_MS="1000"
+# shellcheck source=/dev/null
+[[ -f "$CONF_DIR/ure-btop.env" ]] && . "$CONF_DIR/ure-btop.env"
+
+usage() {
+  cat <<'USAGE'
+Usage: btop-frame --session <name> [--cols N] [--rows N] [--layout wide|standard] [--stop]
+
+Prints one frame of a headless btop as Qt rich text, starting or resizing the
+session behind it as needed. --stop ends that session instead.
+USAGE
+}
+
+while [[ $# -gt 0 ]]; do
+  case "$1" in
+    --session) SESSION="${2:-}"; shift 2 ;;
+    --cols) COLS="${2:-}"; shift 2 ;;
+    --rows) ROWS="${2:-}"; shift 2 ;;
+    --layout) LAYOUT="${2:-}"; shift 2 ;;
+    --stop) ACTION="stop"; shift ;;
+    -h|--help) usage; exit 0 ;;
+    *) echo "btop-frame: unknown argument: $1" >&2; exit 1 ;;
+  esac
+done
+
+[[ -n $SESSION ]] || { echo "btop-frame: --session is required" >&2; exit 1; }
+command -v tmux >/dev/null || { echo "btop-frame: tmux is required" >&2; exit 1; }
+
+if [[ $ACTION == stop ]]; then
+  tmux kill-session -t "$SESSION" 2>/dev/null || true
+  exit 0
+fi
+
+BTOP=""
+for candidate in "$BTOP_BIN" "$HOME/Git/ure/btop/bin/btop" "$(command -v btop || true)"; do
+  if [[ -n $candidate && -x $candidate ]]; then BTOP="$candidate"; break; fi
+done
+[[ -n $BTOP ]] || { echo "btop-frame: btop not found" >&2; exit 1; }
+
+conf="$CONF_DIR/ure-btop-bg-$LAYOUT.conf"
+if [[ ! -f $conf ]]; then
+  #? First run for this layout: start from the user's own btop.conf
+  mkdir -p "$CONF_DIR"
+  if [[ -f "$CONF_DIR/btop.conf" ]]; then cp "$CONF_DIR/btop.conf" "$conf"; else "$BTOP" --default-config > "$conf"; fi
+fi
+
+set_opt() { #? key value
+  if grep -q "^$1 = " "$conf"; then sed -i "s|^$1 = .*|$1 = $2|" "$conf"; else printf '%s = %s\n' "$1" "$2" >> "$conf"; fi
+}
+
+if ! tmux has-session -t "$SESSION" 2>/dev/null; then
+  #? A background btop must not save over the config while it runs, and it draws
+  #? no background of its own so the wallpaper keeps showing.
+  if "$BTOP" --default-config 2>/dev/null | grep -q '^wide_layout'; then
+    if [[ $LAYOUT == wide ]]; then set_opt wide_layout "true"; else set_opt wide_layout "false"; fi
+  fi
+  set_opt theme_background "false"
+  set_opt save_config_on_exit "false"
+  #? Full strength theme colours: the surface's scrim handles contrast here
+  set_opt color_theme '"current"'
+  set_opt update_ms "$UPDATE_MS"
+
+  tmux new-session -d -s "$SESSION" -x "$COLS" -y "$ROWS" \
+    "$BTOP" -c "$conf" --themes-dir "$THEMES_DIR"
+  tmux set-option -t "$SESSION" status off 2>/dev/null || true
+fi
+
+#? Follow the surface when the monitor or font changes size
+read -r current_cols current_rows <<<"$(tmux display-message -p -t "$SESSION" '#{window_width} #{window_height}' 2>/dev/null || echo "0 0")"
+if [[ $current_cols != "$COLS" || $current_rows != "$ROWS" ]]; then
+  tmux resize-window -t "$SESSION" -x "$COLS" -y "$ROWS" 2>/dev/null || true
+fi
+
+#? The theme decides the default text colour, and its background colour is the
+#? one left unpainted so the wallpaper shows through.
+theme="$THEMES_DIR/current.theme"
+default_fg="#a9b1d6"
+transparent_bg="#1a1b26"
+if [[ -f $theme ]]; then
+  value="$(sed -n 's/^theme\[main_fg\]="\(#[0-9a-fA-F]\{6\}\)".*/\1/p' "$theme" | head -1)"
+  [[ -n $value ]] && default_fg="$value"
+  value="$(sed -n 's/^theme\[main_bg\]="\(#[0-9a-fA-F]\{6\}\)".*/\1/p' "$theme" | head -1)"
+  [[ -n $value ]] && transparent_bg="$value"
+fi
+
+tmux capture-pane -e -p -t "$SESSION" \
+  | "$SCRIPT_DIR/ansi-to-html" --default-fg "$default_fg" --transparent-bg "$transparent_bg"

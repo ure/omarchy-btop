@@ -1,0 +1,141 @@
+#!/usr/bin/env python3
+"""Turn a terminal screen full of ANSI colour into Qt rich text.
+
+Reads the escape sequences tmux hands back on stdin and writes markup on
+stdout, one <br> per row, spaces kept as &nbsp; so the columns still line up.
+Cells painted in the theme's own background colour are left unpainted, so a
+wallpaper shows through them.
+"""
+import argparse
+import html
+import re
+import sys
+
+SGR = re.compile(r"\x1b\[([0-9;:]*)m")
+OTHER_ESCAPE = re.compile(r"\x1b(?:\][^\x07\x1b]*(?:\x07|\x1b\\)|[\[\(][0-9;?]*[a-zA-Z]|.)")
+
+# xterm's 16 named colours, enough for btop's tty mode and for stray SGR 30-37
+BASE16 = [
+    "#000000", "#cd0000", "#00cd00", "#cdcd00", "#0000ee", "#cd00cd", "#00cdcd", "#e5e5e5",
+    "#7f7f7f", "#ff0000", "#00ff00", "#ffff00", "#5c5cff", "#ff00ff", "#00ffff", "#ffffff",
+]
+
+
+def xterm256(index):
+    if index < 16:
+        return BASE16[index]
+    if index < 232:
+        index -= 16
+        levels = [0, 95, 135, 175, 215, 255]
+        return "#%02x%02x%02x" % (levels[index // 36], levels[(index // 6) % 6], levels[index % 6])
+    grey = 8 + (index - 232) * 10
+    return "#%02x%02x%02x" % (grey, grey, grey)
+
+
+class Style:
+    __slots__ = ("fg", "bg", "bold", "reverse")
+
+    def __init__(self):
+        self.reset()
+
+    def reset(self):
+        self.fg = None
+        self.bg = None
+        self.bold = False
+        self.reverse = False
+
+    def key(self):
+        return (self.fg, self.bg, self.bold, self.reverse)
+
+
+def apply_sgr(style, params):
+    codes = [int(p) if p else 0 for p in params.replace(":", ";").split(";")] or [0]
+    i = 0
+    while i < len(codes):
+        code = codes[i]
+        if code == 0:
+            style.reset()
+        elif code == 1:
+            style.bold = True
+        elif code in (21, 22):
+            style.bold = False
+        elif code == 7:
+            style.reverse = True
+        elif code == 27:
+            style.reverse = False
+        elif code in (38, 48) and i + 1 < len(codes):
+            target = "fg" if code == 38 else "bg"
+            if codes[i + 1] == 2 and i + 4 < len(codes):
+                setattr(style, target, "#%02x%02x%02x" % tuple(codes[i + 2:i + 5]))
+                i += 4
+            elif codes[i + 1] == 5 and i + 2 < len(codes):
+                setattr(style, target, xterm256(codes[i + 2]))
+                i += 2
+        elif code == 39:
+            style.fg = None
+        elif code == 49:
+            style.bg = None
+        elif 30 <= code <= 37:
+            style.fg = BASE16[code - 30]
+        elif 90 <= code <= 97:
+            style.fg = BASE16[code - 90 + 8]
+        elif 40 <= code <= 47:
+            style.bg = BASE16[code - 40]
+        elif 100 <= code <= 107:
+            style.bg = BASE16[code - 100 + 8]
+        i += 1
+
+
+def span(text, style, default_fg, transparent_bg):
+    if not text:
+        return ""
+    fg, bg = style.fg or default_fg, style.bg
+    if style.reverse:
+        fg, bg = bg or transparent_bg, fg
+    rules = ["color:%s" % fg]
+    #? A cell in the theme's own background colour is left bare so the wallpaper shows
+    if bg and bg.lower() != transparent_bg.lower():
+        rules.append("background-color:%s" % bg)
+    if style.bold:
+        rules.append("font-weight:bold")
+    escaped = html.escape(text).replace(" ", "&nbsp;")
+    return '<span style="%s">%s</span>' % (";".join(rules), escaped)
+
+
+def convert(raw, default_fg, transparent_bg):
+    lines = []
+    style = Style()
+    for row in raw.split("\n"):
+        row = row.rstrip("\r")
+        parts = []
+        pending = []
+        position = 0
+        for match in SGR.finditer(row):
+            pending.append(row[position:match.start()])
+            text = "".join(pending)
+            if text:
+                parts.append(span(text, style, default_fg, transparent_bg))
+                pending = []
+            apply_sgr(style, match.group(1))
+            position = match.end()
+        pending.append(row[position:])
+        text = "".join(pending)
+        if text:
+            parts.append(span(text, style, default_fg, transparent_bg))
+        lines.append("".join(parts))
+    return "<br>".join(lines)
+
+
+def main():
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument("--default-fg", default="#a9b1d6", help="colour for text with no colour of its own")
+    parser.add_argument("--transparent-bg", default="#1a1b26", help="background colour to leave unpainted")
+    args = parser.parse_args()
+
+    raw = sys.stdin.read()
+    raw = OTHER_ESCAPE.sub(lambda m: m.group(0) if SGR.fullmatch(m.group(0)) else "", raw)
+    sys.stdout.write(convert(raw, args.default_fg, args.transparent_bg))
+
+
+if __name__ == "__main__":
+    main()

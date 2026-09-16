@@ -2,12 +2,13 @@ import QtQuick
 import Quickshell
 import qs.Ui
 
-// A bar icon that opens btop filling the display it is clicked from.
+// Bar icon: left click puts btop on the wallpaper of the monitor under the
+// cursor, right click opens it as a window you can actually use.
 BarWidget {
   id: root
   moduleName: "ure.btop"
 
-  readonly property string launcher: Quickshell.env("HOME") + "/.config/omarchy/plugins/ure.btop/scripts/btop-screen"
+  readonly property string scripts: Quickshell.env("HOME") + "/.config/omarchy/plugins/ure.btop/scripts"
 
   implicitWidth: button.implicitWidth
   implicitHeight: button.implicitHeight
@@ -17,12 +18,11 @@ BarWidget {
     anchors.fill: parent
     bar: root.bar
     text: "󰍛"
-    tooltipText: "btop · system monitor filling this display"
+    tooltipText: "btop · click for the wallpaper, right click for a window"
 
     onPressed: function(mouseButton) {
-      //? Right click forces btop's normal stacked layout, whatever the screen shape
-      if (mouseButton === Qt.RightButton) root.bar.run(root.launcher + " --layout standard")
-      else root.bar.run(root.launcher)
+      if (mouseButton === Qt.RightButton) root.bar.run(root.scripts + "/btop-screen --monitor focused")
+      else root.bar.run(root.scripts + "/btop-background toggle")
     }
   }
 }

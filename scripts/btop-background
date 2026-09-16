@@ -1,0 +1,18 @@
+#!/bin/bash
+# Toggle btop on the wallpaper for the monitor holding the cursor.
+# The surfaces themselves live in the plugin's Service.qml.
+
+set -euo pipefail
+
+ACTION="${1:-toggle}"
+SCREEN="${2:-}"
+[[ -n $SCREEN ]] || SCREEN="$(hyprctl monitors -j | jq -r '[.[] | select(.focused)][0].name')"
+
+case "$ACTION" in
+  toggle) method="toggleBackground" ;;
+  show) method="showBackground" ;;
+  hide) method="hideBackground" ;;
+  *) echo "Usage: btop-background [toggle|show|hide] [monitor]" >&2; exit 1 ;;
+esac
+
+exec omarchy-shell ure.btop "$method" "$SCREEN"

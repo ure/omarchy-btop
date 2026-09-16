@@ -38,9 +38,13 @@ And add the menu row:
 
 ## Use
 
-- **Bar icon:** click the 󰍛 icon to open btop on the display the bar belongs to. Right
-  click forces btop's normal stacked layout. Place it with
-  `omarchy plugin enable ure.btop --section right`.
+- **Bar icon:** click the 󰍛 icon to put btop on the wallpaper of the monitor under the
+  cursor, or take it away again. Right click opens btop as an ordinary window instead.
+  Place the icon with `omarchy plugin enable ure.btop --section right`.
+- **On the wallpaper:** the plugin's service draws btop on a background layer surface,
+  above the wallpaper and below every window, on each wide short screen it finds. It
+  takes no input at all, the way a wallpaper does not. Control it with
+  `scripts/btop-background [toggle|show|hide] [monitor]`, which any keybinding can call.
 - **Menu:** open the Omarchy menu, then *Apps → btop*. It fills whichever display has
   focus. Run it again to focus the window that is already open.
 - **Command line:**
