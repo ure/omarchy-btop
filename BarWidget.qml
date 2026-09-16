@@ -17,7 +17,9 @@ Panel {
   property real transparency: 0.75   //? 1 = nothing behind the text, 0 = solid backing
   property var screens: []
   property bool anyOnWallpaper: false
-  property bool barShown: true
+  property var barHiddenScreens: []
+  //? Width of one switch, so the legend lines up with the switches below it
+  property real switchWidth: metricsSwitch.implicitWidth
 
   implicitWidth: button.implicitWidth
   implicitHeight: button.implicitHeight
@@ -25,6 +27,10 @@ Panel {
   function refresh() {
     if (!statusProc.running) statusProc.running = true
     if (!barStateProc.running) barStateProc.running = true
+  }
+
+  function barShownOn(name) {
+    return barHiddenScreens.indexOf(name) === -1
   }
 
   //? PanelSlider leaves snapping to the caller, so round to the step here
@@ -67,14 +73,23 @@ Panel {
     }
   }
 
-  //? Omarchy hides the bar with a flag file, so its absence means shown
+  //? Screens the bar skips, as the bar itself reads them
   Process {
     id: barStateProc
-    command: ["sh", "-c", "test -f \"$HOME/.local/state/omarchy/toggles/bar-off\" && echo off || echo on"]
+    command: ["sh", "-c", "jq -c '.bar.hiddenScreens // []' \"$HOME/.config/omarchy/shell.json\""]
     stdout: StdioCollector {
-      onStreamFinished: root.barShown = this.text.trim() === "on"
+      onStreamFinished: {
+        try {
+          root.barHiddenScreens = JSON.parse(this.text)
+        } catch (error) {
+          root.barHiddenScreens = []
+        }
+      }
     }
   }
+
+  //? Never shown, only measured
+  ToggleSwitch { id: metricsSwitch; visible: false }
 
   Process { id: applyProc }
 
@@ -136,7 +151,38 @@ Panel {
         PanelSectionHeader {
           width: parent.width
           foreground: root.barForeground
-          text: "Show btop on"
+          text: "Screens"
+        }
+
+        Item {
+          width: parent.width
+          implicitHeight: legend.implicitHeight
+
+          Row {
+            id: legend
+            anchors.right: parent.right
+            spacing: Style.space(10)
+
+            Text {
+              width: root.switchWidth
+              horizontalAlignment: Text.AlignHCenter
+              textFormat: Text.PlainText
+              text: "btop"
+              color: Qt.darker(root.barForeground, 1.4)
+              font.family: Style.font.family
+              font.pixelSize: Style.font.caption
+            }
+
+            Text {
+              width: root.switchWidth
+              horizontalAlignment: Text.AlignHCenter
+              textFormat: Text.PlainText
+              text: "bar"
+              color: Qt.darker(root.barForeground, 1.4)
+              font.family: Style.font.family
+              font.pixelSize: Style.font.caption
+            }
+          }
         }
 
         Repeater {
@@ -159,39 +205,24 @@ Panel {
               font.pixelSize: Style.font.body
             }
 
-            ToggleSwitch {
+            Row {
               id: screenSwitch
               anchors.right: parent.right
               anchors.verticalCenter: parent.verticalCenter
-              foreground: root.barForeground
-              checked: modelData.shown === true
-              onToggled: root.run(root.scripts + "/btop-background toggle " + modelData.name)
+              spacing: Style.space(10)
+
+              ToggleSwitch {
+                foreground: root.barForeground
+                checked: modelData.shown === true
+                onToggled: root.run(root.scripts + "/btop-background toggle " + modelData.name)
+              }
+
+              ToggleSwitch {
+                foreground: root.barForeground
+                checked: root.barShownOn(modelData.name)
+                onToggled: root.run(root.scripts + "/bar-screen toggle " + modelData.name)
+              }
             }
-          }
-        }
-
-        Item {
-          width: parent.width
-          implicitHeight: Math.max(barLabel.implicitHeight, barSwitch.implicitHeight)
-
-          Text {
-            id: barLabel
-            anchors.left: parent.left
-            anchors.verticalCenter: parent.verticalCenter
-            textFormat: Text.PlainText
-            text: "Top bar"
-            color: root.barForeground
-            font.family: Style.font.family
-            font.pixelSize: Style.font.body
-          }
-
-          ToggleSwitch {
-            id: barSwitch
-            anchors.right: parent.right
-            anchors.verticalCenter: parent.verticalCenter
-            foreground: root.barForeground
-            checked: root.barShown
-            onToggled: root.run("omarchy toggle bar")
           }
         }
 

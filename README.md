@@ -41,9 +41,12 @@ And add the menu row:
 - **Bar icon:** click the 󰍛 icon for a panel holding:
   - **a switch per monitor**, so btop goes on the wallpaper of whichever screens you want
     (the wide short ones are marked, and start out on)
-  - **a Top bar switch**, which hides or shows Omarchy's bar. Omarchy has no per-monitor
-    bar setting, so this covers every screen at once. With the bar gone the surfaces
-    take the whole screen, since nothing is reserved any more.
+  - **a bar switch beside it**, one per screen, hiding or showing Omarchy's bar on that
+    monitor alone. With the bar gone that screen reserves nothing, so btop grows into
+    the freed space. This drives `bar.hiddenScreens` in `shell.json`, which a cloned
+    bar can filter its screens on; the stock `omarchy.bar` ignores it and draws
+    everywhere. `scripts/bar-screen [toggle|show|hide] <monitor>` does the same from a
+    keybinding.
   - **a transparency slider** for how much wallpaper shows through btop
   - **Open as a window**, the same as right clicking the icon
 

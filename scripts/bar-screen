@@ -1,0 +1,33 @@
+#!/bin/bash
+# Show or hide the Omarchy bar on one monitor.
+#
+# Works by editing bar.hiddenScreens in ~/.config/omarchy/shell.json, which the
+# shell reloads on save. It needs a bar that honours that list: the stock
+# omarchy.bar draws on every screen, a cloned bar can filter on it.
+
+set -euo pipefail
+
+ACTION="${1:-toggle}"
+SCREEN="${2:-}"
+SHELL_JSON="$HOME/.config/omarchy/shell.json"
+
+[[ -n $SCREEN ]] || { echo "Usage: bar-screen [toggle|show|hide] <monitor>" >&2; exit 1; }
+[[ $ACTION == toggle || $ACTION == show || $ACTION == hide ]] \
+  || { echo "Usage: bar-screen [toggle|show|hide] <monitor>" >&2; exit 1; }
+[[ -f $SHELL_JSON ]] || { echo "bar-screen: no $SHELL_JSON" >&2; exit 1; }
+
+updated="$(jq --arg screen "$SCREEN" --arg action "$ACTION" '
+  (.bar.hiddenScreens // []) as $hidden
+  | (($hidden | index($screen)) != null) as $isHidden
+  | (if $action == "toggle" then (if $isHidden then "show" else "hide" end) else $action end) as $wanted
+  | .bar.hiddenScreens = (
+      if $wanted == "hide" then ($hidden + [$screen] | unique)
+      else ($hidden | map(select(. != $screen)))
+      end
+    )
+' "$SHELL_JSON")"
+
+#? Write through a temporary file so a failed jq never truncates the config
+printf '%s\n' "$updated" > "$SHELL_JSON.tmp"
+chmod 600 "$SHELL_JSON.tmp"
+mv "$SHELL_JSON.tmp" "$SHELL_JSON"
