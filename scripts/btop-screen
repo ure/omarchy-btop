@@ -72,6 +72,7 @@ else
     || { echo "btop-screen: no focused monitor" >&2; exit 1; }
 fi
 monitor_name="$(jq -r '.name' <<<"$monitor")"
+monitor_id="$(jq -r '.id' <<<"$monitor")"
 width="$(jq -r '(.width / .scale) | floor' <<<"$monitor")"
 height="$(jq -r '(.height / .scale) | floor' <<<"$monitor")"
 
@@ -146,8 +147,9 @@ else
   set_opt color_theme '"Default"'
 fi
 
-#? One btop screen at a time
-existing="$(hyprctl clients -j | jq -r --arg id "$APP_ID" '[.[] | select(.class == $id)][0].address // empty')"
+#? One btop screen per monitor, so a second display can have its own
+existing="$(hyprctl clients -j | jq -r --arg id "$APP_ID" --argjson mon "$monitor_id" \
+  '[.[] | select(.class == $id and .monitor == $mon)][0].address // empty')"
 if [[ -n $existing ]]; then
   [[ $IF_RUNNING == exit ]] && exit 0
   hypr_focus_window "$existing"
@@ -173,7 +175,8 @@ fi
 
 if [[ $monitor_name != "$previous" ]]; then
   for _ in $(seq 1 40); do
-    if hyprctl clients -j | jq -e --arg id "$APP_ID" 'any(.[]; .class == $id)' >/dev/null; then break; fi
+    if hyprctl clients -j | jq -e --arg id "$APP_ID" --argjson mon "$monitor_id" \
+      'any(.[]; .class == $id and .monitor == $mon)' >/dev/null; then break; fi
     sleep 0.1
   done
   hypr_focus_monitor "$previous"
