@@ -5,8 +5,8 @@ import qs.Commons
 import qs.Ui
 
 // Bar icon and its popup: a switch per monitor for btop on the wallpaper, a
-// switch for the top bar itself, a slider for how much wallpaper shows through,
-// and a button that opens btop as an ordinary window.
+// slider for how much wallpaper shows through, and a button that opens btop as
+// an ordinary window.
 Panel {
   id: root
   moduleName: "ure.btop"
@@ -17,22 +17,12 @@ Panel {
   property real transparency: 0.75   //? 1 = nothing behind the text, 0 = solid backing
   property var screens: []
   property bool anyOnWallpaper: false
-  property var barHiddenScreens: []
-  property string barSupport: "unknown"   //? supported | unsupported | missing
-  //? Width of one switch, so the legend lines up with the switches below it
-  property real switchWidth: metricsSwitch.implicitWidth
 
   implicitWidth: button.implicitWidth
   implicitHeight: button.implicitHeight
 
   function refresh() {
     if (!statusProc.running) statusProc.running = true
-    if (!barStateProc.running) barStateProc.running = true
-    if (!barSupportProc.running) barSupportProc.running = true
-  }
-
-  function barShownOn(name) {
-    return barHiddenScreens.indexOf(name) === -1
   }
 
   //? PanelSlider leaves snapping to the caller, so round to the step here
@@ -75,32 +65,7 @@ Panel {
     }
   }
 
-  //? Screens the bar skips, as the bar itself reads them
-  Process {
-    id: barStateProc
-    command: ["sh", "-c", "jq -c '.bar.hiddenScreens // []' \"$HOME/.config/omarchy/shell.json\""]
-    stdout: StdioCollector {
-      onStreamFinished: {
-        try {
-          root.barHiddenScreens = JSON.parse(this.text)
-        } catch (error) {
-          root.barHiddenScreens = []
-        }
-      }
-    }
-  }
 
-  //? Only a bar that reads bar.hiddenScreens can be hidden per screen
-  Process {
-    id: barSupportProc
-    command: [Quickshell.env("HOME") + "/.config/omarchy/plugins/ure.btop/scripts/bar-support", "status"]
-    stdout: StdioCollector {
-      onStreamFinished: root.barSupport = this.text.trim()
-    }
-  }
-
-  //? Never shown, only measured
-  ToggleSwitch { id: metricsSwitch; visible: false }
 
   Process { id: applyProc }
 
@@ -165,38 +130,6 @@ Panel {
           text: "Screens"
         }
 
-        Item {
-          width: parent.width
-          implicitHeight: legend.implicitHeight
-
-          Row {
-            id: legend
-            anchors.right: parent.right
-            spacing: Style.space(10)
-
-            Text {
-              width: root.switchWidth
-              horizontalAlignment: Text.AlignHCenter
-              textFormat: Text.PlainText
-              text: "btop"
-              color: Qt.darker(root.barForeground, 1.4)
-              font.family: Style.font.family
-              font.pixelSize: Style.font.caption
-            }
-
-            Text {
-              width: root.switchWidth
-              horizontalAlignment: Text.AlignHCenter
-              textFormat: Text.PlainText
-              text: "bar"
-              visible: root.barSupport === "supported"
-              color: Qt.darker(root.barForeground, 1.4)
-              font.family: Style.font.family
-              font.pixelSize: Style.font.caption
-            }
-          }
-        }
-
         Repeater {
           model: root.screens
 
@@ -217,37 +150,15 @@ Panel {
               font.pixelSize: Style.font.body
             }
 
-            Row {
+            ToggleSwitch {
               id: screenSwitch
               anchors.right: parent.right
               anchors.verticalCenter: parent.verticalCenter
-              spacing: Style.space(10)
-
-              ToggleSwitch {
-                foreground: root.barForeground
-                checked: modelData.shown === true
-                onToggled: root.run(root.scripts + "/btop-background toggle " + modelData.name)
-              }
-
-              ToggleSwitch {
-                foreground: root.barForeground
-                visible: root.barSupport === "supported"
-                checked: root.barShownOn(modelData.name)
-                onToggled: root.run(root.scripts + "/bar-screen toggle " + modelData.name)
-              }
+              foreground: root.barForeground
+              checked: modelData.shown === true
+              onToggled: root.run(root.scripts + "/btop-background toggle " + modelData.name)
             }
           }
-        }
-
-        Button {
-          width: parent.width
-          visible: root.barSupport === "unsupported"
-          foreground: root.barForeground
-          bordered: true
-          iconText: "󰍜"
-          text: "Enable per-screen bars"
-          tooltipText: "Clones Omarchy's bar and teaches it to skip chosen screens"
-          onClicked: root.run(root.scripts + "/bar-support install && omarchy restart shell")
         }
 
         PanelSeparator {

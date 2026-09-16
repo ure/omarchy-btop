@@ -46,14 +46,6 @@ Then add the window rule to `~/.config/hypr/hyprland.lua`:
 dofile(os.getenv("HOME") .. "/.config/omarchy/plugins/ure.btop/hypr/windows.lua")
 ```
 
-For the per-screen bar switches, let it patch a clone of the bar (skip this if you are
-happy with the bar on every screen):
-
-```bash
-~/.config/omarchy/plugins/ure.btop/scripts/bar-support install
-omarchy restart shell
-```
-
 And add the menu row:
 
 ```bash
@@ -65,28 +57,19 @@ And add the menu row:
 - **Bar icon:** click the 󰍛 icon for a panel holding:
   - **a switch per monitor**, so btop goes on the wallpaper of whichever screens you want
     (the wide short ones are marked, and start out on)
-  - **a bar switch beside it**, one per screen, hiding or showing Omarchy's bar on that
-    monitor alone. With the bar gone that screen reserves nothing, so btop grows into
-    the freed space. `scripts/bar-screen [toggle|show|hide] <monitor>` does the same
-    from a keybinding.
-
-  Omarchy's own bar draws on every screen, so the first time the panel offers
-  **Enable per-screen bars**: it clones the stock bar into your own plugins, the way
-  `omarchy plugin clone` does, and teaches the clone to skip the screens listed in
-  `bar.hiddenScreens`. The packaged bar is never touched, and a bar already able to do
-  this is left alone. `scripts/bar-support [status|install]` is the same thing from a
-  terminal.
   - **a transparency slider** for how much wallpaper shows through btop
   - **Open as a window**, the same as right clicking the icon
 
-  The transparency is remembered in `~/.local/state/ure-btop/state.json`. Right click opens btop as an ordinary window instead.
-  Place the icon with `omarchy plugin enable ure.btop --section right`.
-- **On the wallpaper:** the plugin's service draws btop on a background layer surface,
-  above the wallpaper and below every window, on each wide short screen it finds. It
+  Right click the icon opens the window straight away. The transparency is remembered
+  in `~/.local/state/ure-btop/state.json`. Place the icon with
+  `omarchy plugin enable ure.btop --section right`.
+- **On the wallpaper:** the plugin's service draws btop on a layer-shell surface, above
+  the wallpaper and below every window, on each wide short screen it finds. It
   takes no input at all, the way a wallpaper does not. Control it with
   `scripts/btop-background [toggle|show|hide] [monitor]`, which any keybinding can call.
-- **Menu:** open the Omarchy menu, then *Apps → btop*. It fills whichever display has
-  focus. Run it again to focus the window that is already open.
+- **Menu:** open the Omarchy menu and pick *btop*. It opens a window on the wide short
+  screen when there is one, else on the focused display. Run it again to focus the
+  window that is already open.
 - **Command line:**
 
   ```bash
@@ -130,11 +113,7 @@ rm -f ~/.config/btop/ure-btop-*.conf ~/.config/btop/themes/ure-btop-dim.theme
 
 Then drop the `dofile` line from `~/.config/hypr/hyprland.lua`.
 
-Two things are deliberately left behind, because they are yours rather than the
-plugin's: `bar.hiddenScreens` in `shell.json` (harmless to a bar that ignores it, and
-`scripts/bar-screen show <monitor>` empties it), and the bar clone that
-`bar-support install` made, which `omarchy plugin remove` can take as well. Your own
-`btop.conf` is never touched.
+Your own `btop.conf` is never touched.
 
 ## License
 
