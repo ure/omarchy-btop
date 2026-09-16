@@ -11,15 +11,22 @@ monitor, choosing the layout from that monitor's shape.
 - The font is shrunk only as far as needed to keep btop's menus usable, which need at
   least an 80x24 grid.
 
-## Requirements
+## Dependencies
 
-- Omarchy with Hyprland, plus `foot`, `jq`, `awk` and `tmux`
-- For the column layout, a btop that has the `wide_layout` option. The plugin builds its
-  own with `scripts/btop-build` (needs `git`, `make` and a C++ compiler) and installs it
-  under `~/.local/share/ure.btop`, leaving the system btop alone. Without that build it
-  falls back to btop's stacked layout.
-  The change itself is `patches/wide-layout.patch`, against
-  [ure/btop](https://github.com/ure/btop/tree/wide-layout).
+All of these come from your distribution; the plugin installs none of them for you.
+
+| Needed for | Packages |
+|---|---|
+| Everything | Omarchy (Quattro) with Hyprland and `omarchy-shell`, `jq`, `awk`, `hyprctl` |
+| The window mode | `foot` |
+| The wallpaper mode | `tmux`, `python3` |
+| `scripts/btop-build` | `git`, `make`, a C++ compiler, and btop's own build dependencies |
+
+The column layout needs a btop that has the `wide_layout` option, which no distribution
+ships. `scripts/btop-build` fetches btop at one pinned commit, builds it, and installs it
+under `~/.local/share/ure.btop`, leaving the system btop alone; without that build the
+plugin falls back to btop's stacked layout. The change itself is
+`patches/wide-layout.patch`, against [ure/btop](https://github.com/ure/btop/tree/wide-layout).
 
 ## Install
 
@@ -114,11 +121,20 @@ changes made in btop's options menu only affect the full-screen instance.
 ## Uninstall
 
 ```bash
-~/.config/omarchy/plugins/ure.btop/scripts/menu-entry remove
-omarchy plugin remove ure.btop
+~/.config/omarchy/plugins/ure.btop/scripts/menu-entry remove   # the menu row
+omarchy plugin remove ure.btop                                 # the plugin and its bar icon
+rm -rf ~/.local/share/ure.btop ~/.cache/ure.btop               # the btop it built
+rm -rf ~/.local/state/ure-btop                                 # the remembered transparency
+rm -f ~/.config/btop/ure-btop-*.conf ~/.config/btop/themes/ure-btop-dim.theme
 ```
 
 Then drop the `dofile` line from `~/.config/hypr/hyprland.lua`.
+
+Two things are deliberately left behind, because they are yours rather than the
+plugin's: `bar.hiddenScreens` in `shell.json` (harmless to a bar that ignores it, and
+`scripts/bar-screen show <monitor>` empties it), and the bar clone that
+`bar-support install` made, which `omarchy plugin remove` can take as well. Your own
+`btop.conf` is never touched.
 
 ## License
 
