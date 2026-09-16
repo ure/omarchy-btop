@@ -209,6 +209,10 @@ Item {
       readonly property int rows: Math.floor(height / Math.max(1, metrics.height))
 
       property string frame: ""
+      //? Ticks a fetch has been in flight. A plugin reload can kill the process
+      //? while Process still believes it runs, and then nothing would ever be
+      //? drawn again, so a fetch that overstays is dropped and retried.
+      property int pendingTicks: 0
 
       screen: modelData
       visible: root.shows(modelData)
@@ -223,7 +227,11 @@ Item {
       margins.top: barInset
 
       WlrLayershell.namespace: "ure-btop-background"
-      WlrLayershell.layer: WlrLayer.Background
+      //? Bottom, not Background: the wallpaper holds the background layer, and
+      //? whichever of the two was mapped last would otherwise cover the other —
+      //? a plugin reload remaps the wallpaper and btop would vanish behind it.
+      //? Bottom draws above the wallpaper and still beneath every window.
+      WlrLayershell.layer: WlrLayer.Bottom
       WlrLayershell.keyboardFocus: WlrKeyboardFocus.None
       exclusionMode: ExclusionMode.Ignore
 
@@ -248,8 +256,12 @@ Item {
           "--rows", String(surface.rows),
           "--layout", surface.layout]
         stdout: StdioCollector {
-          onStreamFinished: if (this.text.length > 0) surface.frame = this.text
+          onStreamFinished: {
+            if (this.text.length > 0) surface.frame = this.text
+            surface.pendingTicks = 0
+          }
         }
+        onExited: surface.pendingTicks = 0
       }
 
       Process {
@@ -262,11 +274,31 @@ Item {
         running: surface.visible
         repeat: true
         triggeredOnStart: true
-        onTriggered: if (!frameProc.running) frameProc.running = true
+        onTriggered: {
+          //? The first tick can land before the font has been measured, and a
+          //? grid of zero would size the headless btop to nothing at all
+          if (surface.columns < 40 || surface.rows < 10) return
+          if (frameProc.running) {
+            surface.pendingTicks++
+            //? Long enough that a slow frame is left alone, short enough that a
+            //? surface orphaned by a reload paints again within a few seconds
+            if (surface.pendingTicks >= 5) {
+              frameProc.running = false
+              surface.pendingTicks = 0
+            }
+            return
+          }
+          frameProc.running = true
+        }
       }
 
-      //? Nothing to draw for a hidden screen, and no btop to keep running either
-      onVisibleChanged: if (!visible && !stopProc.running) stopProc.running = true
+      //? Stop the headless btop when this screen was switched off by hand, but
+      //? not when the shell is tearing the plugin down to reload it: leaving it
+      //? running is what lets the surface paint again the moment it returns.
+      onVisibleChanged: {
+        if (visible || stopProc.running) return
+        if (root.overrides[modelData.name] === false) stopProc.running = true
+      }
 
       Text {
         anchors.fill: parent

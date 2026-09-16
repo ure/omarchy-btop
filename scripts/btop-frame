@@ -45,6 +45,9 @@ while [[ $# -gt 0 ]]; do
 done
 
 [[ -n $SESSION ]] || { echo "btop-frame: --session is required" >&2; exit 1; }
+#? A zero or silly grid would leave btop with nothing to draw on
+[[ $COLS =~ ^[0-9]+$ && $ROWS =~ ^[0-9]+$ && $COLS -ge 40 && $ROWS -ge 10 ]] \
+  || { echo "btop-frame: --cols/--rows must be at least 40x10" >&2; exit 1; }
 command -v tmux >/dev/null || { echo "btop-frame: tmux is required" >&2; exit 1; }
 
 if [[ $ACTION == stop ]]; then
@@ -103,6 +106,13 @@ if [[ -f $theme ]]; then
   [[ -n $value ]] && default_fg="$value"
   value="$(sed -n 's/^theme\[main_bg\]="\(#[0-9a-fA-F]\{6\}\)".*/\1/p' "$theme" | head -1)"
   [[ -n $value ]] && transparent_bg="$value"
+fi
+
+#? A session whose btop died renders as an empty pane for good, so drop it and
+#? let the next frame start a fresh one rather than showing nothing for ever.
+if [[ -z "$(tmux capture-pane -p -t "$SESSION" 2>/dev/null | tr -d '[:space:]')" ]]; then
+  tmux kill-session -t "$SESSION" 2>/dev/null || true
+  exit 0
 fi
 
 tmux capture-pane -e -p -t "$SESSION" \
