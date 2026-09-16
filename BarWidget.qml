@@ -136,7 +136,7 @@ Panel {
         PanelSectionHeader {
           width: parent.width
           foreground: root.barForeground
-          text: "btop on the wallpaper"
+          text: "Show btop on"
         }
 
         Repeater {
@@ -170,11 +170,6 @@ Panel {
           }
         }
 
-        PanelSeparator {
-          width: parent.width
-          foreground: root.barForeground
-        }
-
         Item {
           width: parent.width
           implicitHeight: Math.max(barLabel.implicitHeight, barSwitch.implicitHeight)
@@ -198,6 +193,11 @@ Panel {
             checked: root.barShown
             onToggled: root.run("omarchy toggle bar")
           }
+        }
+
+        PanelSeparator {
+          width: parent.width
+          foreground: root.barForeground
         }
 
         PanelSectionHeader {
