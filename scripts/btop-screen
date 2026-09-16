@@ -22,7 +22,8 @@ IF_RUNNING="focus"
 
 # Defaults; override any of these in ~/.config/btop/ure-btop.env
 DIM="0.7"          # how much to darken btop's light text, 1 = leave it alone
-ALPHA="0.85"       # terminal background opacity, 1 = opaque
+ALPHA="1"          # terminal background opacity, 1 = opaque. The window is a
+                   # window, not scenery: the wallpaper mode is the see-through one.
 FONT="JetBrainsMono Nerd Font"
 MAX_FONT_SIZE="9"  # never bigger than this, smaller only when btop's menus need it
 MIN_COLS="80"      # btop refuses to open its menus below 80x24
