@@ -38,8 +38,9 @@ And add the menu row:
 
 ## Use
 
-- **Bar icon:** click the 󰍛 icon to put btop on the wallpaper of the monitor under the
-  cursor, or take it away again. Right click opens btop as an ordinary window instead.
+- **Bar icon:** click the 󰍛 icon to put btop on the wallpaper of the wide short screen,
+  or take it away again. Only when no such screen is connected does it fall back to the
+  monitor under the cursor. Name a monitor to override that. Right click opens btop as an ordinary window instead.
   Place the icon with `omarchy plugin enable ure.btop --section right`.
 - **On the wallpaper:** the plugin's service draws btop on a background layer surface,
   above the wallpaper and below every window, on each wide short screen it finds. It

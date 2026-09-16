@@ -1,12 +1,23 @@
 #!/bin/bash
-# Toggle btop on the wallpaper for the monitor holding the cursor.
+# Put btop on the wallpaper, or take it away.
+#
+# Without a monitor it goes to the wide short screen (a Corsair Xeneon Edge and
+# the like) whenever one is connected — that is the screen this is for — and
+# only falls back to the focused monitor when there is no such screen.
 # The surfaces themselves live in the plugin's Service.qml.
 
 set -euo pipefail
 
 ACTION="${1:-toggle}"
 SCREEN="${2:-}"
-[[ -n $SCREEN ]] || SCREEN="$(hyprctl monitors -j | jq -r '[.[] | select(.focused)][0].name')"
+
+if [[ -z $SCREEN ]]; then
+  SCREEN="$(hyprctl monitors -j | jq -r '
+    [.[] | select(((.width / .scale) >= (.height / .scale) * 2.2) or ((.height / .scale) < 600))][0].name
+    // [.[] | select(.focused)][0].name
+  ')"
+fi
+[[ -n $SCREEN && $SCREEN != "null" ]] || { echo "btop-background: no monitor to use" >&2; exit 1; }
 
 case "$ACTION" in
   toggle) method="toggleBackground" ;;
