@@ -38,6 +38,9 @@ And add the menu row:
 
 ## Use
 
+- **Bar icon:** click the 󰍛 icon to open btop on the display the bar belongs to. Right
+  click forces btop's normal stacked layout. Place it with
+  `omarchy plugin enable ure.btop --section right`.
 - **Menu:** open the Omarchy menu, then *Apps → btop*. It fills whichever display has
   focus. Run it again to focus the window that is already open.
 - **Command line:**

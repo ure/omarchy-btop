@@ -2,14 +2,28 @@
   "schemaVersion": 1,
   "id": "ure.btop",
   "name": "btop screen",
-  "version": "1.0.0",
+  "version": "1.1.0",
   "author": "ure",
   "license": "MIT",
   "description": "Run btop sized to a whole monitor, in a wide column layout on short wide screens like the Corsair Xeneon Edge",
   "kinds": [
-    "menu"
+    "menu",
+    "bar-widget"
   ],
   "entryPoints": {
-    "menu": "Menu.qml"
+    "menu": "Menu.qml",
+    "barWidget": "BarWidget.qml"
+  },
+  "barWidget": {
+    "displayName": "btop",
+    "description": "Open btop filling the display, in a wide column layout on short wide screens.",
+    "category": "System",
+    "aliases": [
+      "btop",
+      "system monitor",
+      "resources"
+    ],
+    "allowMultiple": false,
+    "defaultSection": "right"
   }
 }
