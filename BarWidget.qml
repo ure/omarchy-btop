@@ -21,7 +21,7 @@ BarWidget {
     tooltipText: "btop · click for the wallpaper, right click for a window"
 
     onPressed: function(mouseButton) {
-      if (mouseButton === Qt.RightButton) root.bar.run(root.scripts + "/btop-screen --monitor focused")
+      if (mouseButton === Qt.RightButton) root.bar.run(root.scripts + "/btop-screen")
       else root.bar.run(root.scripts + "/btop-background toggle")
     }
   }
