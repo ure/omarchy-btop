@@ -51,6 +51,17 @@ for tool in hyprctl jq foot awk; do
   command -v "$tool" >/dev/null || { echo "btop-screen: $tool is required" >&2; exit 1; }
 done
 
+#? Hyprland 0.56 dispatchers are Lua; older ones take the bare name.
+hypr_focus_monitor() {
+  hyprctl dispatch "hl.dsp.focus({ monitor = \"$1\" })" >/dev/null 2>&1 \
+    || hyprctl dispatch focusmonitor "$1" >/dev/null 2>&1 || true
+}
+
+hypr_focus_window() {
+  hyprctl dispatch "hl.dsp.focus({ window = \"address:$1\" })" >/dev/null 2>&1 \
+    || hyprctl dispatch focuswindow "address:$1" >/dev/null 2>&1 || true
+}
+
 #? The monitor to cover, and its size in logical pixels
 monitors_json="$(hyprctl monitors -j)"
 if [[ -n $MONITOR ]]; then
@@ -82,12 +93,12 @@ if [[ $LAYOUT == wide && $has_wide == no ]]; then
   LAYOUT="standard"
 fi
 
-#? Font size: foot cells measure about 0.82 x 1.88 times the font size in pixels.
+#? Font size: foot cells measure about 0.82 x 1.87 times the font size in pixels.
 #? Take the largest size that still leaves btop enough room to open its menus.
 font_size="$(awk -v w="$width" -v h="$height" -v max="$MAX_FONT_SIZE" -v cols="$MIN_COLS" -v rows="$MIN_ROWS" '
   BEGIN {
     for (size = max; size >= 4; size -= 0.5) {
-      if (int(w / (0.82 * size)) >= cols && int(h / (1.88 * size)) >= rows) { print size; exit }
+      if (int(w / (0.82 * size)) >= cols && int(h / (1.87 * size)) >= rows) { print size; exit }
     }
     print 4
   }')"
@@ -139,7 +150,7 @@ fi
 existing="$(hyprctl clients -j | jq -r --arg id "$APP_ID" '[.[] | select(.class == $id)][0].address // empty')"
 if [[ -n $existing ]]; then
   [[ $IF_RUNNING == exit ]] && exit 0
-  hyprctl dispatch focuswindow "address:$existing" >/dev/null
+  hypr_focus_window "$existing"
   exit 0
 fi
 
@@ -147,7 +158,7 @@ fi
 #? focus back once the window is up. The size and placement come from the
 #? org.omarchy.btop-screen window rule in hypr/windows.lua.
 previous="$(jq -r '[.[] | select(.focused)][0].name' <<<"$monitors_json")"
-if [[ $monitor_name != "$previous" ]]; then hyprctl dispatch focusmonitor "$monitor_name" >/dev/null; fi
+if [[ $monitor_name != "$previous" ]]; then hypr_focus_monitor "$monitor_name"; fi
 
 launch=(foot --app-id="$APP_ID"
   -o "font=$FONT:size=$font_size"
@@ -165,5 +176,5 @@ if [[ $monitor_name != "$previous" ]]; then
     if hyprctl clients -j | jq -e --arg id "$APP_ID" 'any(.[]; .class == $id)' >/dev/null; then break; fi
     sleep 0.1
   done
-  hyprctl dispatch focusmonitor "$previous" >/dev/null
+  hypr_focus_monitor "$previous"
 fi
