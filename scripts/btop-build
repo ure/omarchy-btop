@@ -64,15 +64,15 @@ fi
 
 echo "btop-build: fetching $REPO at $COMMIT"
 git -C "$BUILD_DIR" fetch --depth 1 origin f1591d95939cf15f94f4789c7f27e6708670cb06
-#? Checked out and cleaned as one step, so the build can only ever run on the
-#? commit above, never on leftovers from an earlier run
-git -C "$BUILD_DIR" checkout -q --detach f1591d95939cf15f94f4789c7f27e6708670cb06 && git -C "$BUILD_DIR" clean -qfdx
-built="$(git -C "$BUILD_DIR" rev-parse HEAD)"
-[[ $built == "$COMMIT" ]] || { echo "btop-build: checked out $built, wanted $COMMIT" >&2; exit 1; }
-
 echo "btop-build: compiling, this takes a couple of minutes"
-make -C "$BUILD_DIR" -j"$(nproc)"
-make -C "$BUILD_DIR" install PREFIX="$PREFIX"
+
+#? Checkout, clean and build as one fail-closed chain: nothing after a failed
+#? link runs, so what gets compiled and installed is always the commit above and
+#? never leftovers from an earlier run.
+git -C "$BUILD_DIR" checkout -q --detach f1591d95939cf15f94f4789c7f27e6708670cb06 \
+  && git -C "$BUILD_DIR" clean -qfdx \
+  && make -C "$BUILD_DIR" -j"$(nproc)" \
+  && make -C "$BUILD_DIR" install PREFIX="$PREFIX"
 
 if installed_has_wide; then
   echo "btop-build: installed $PREFIX/bin/btop with the wide layout"
