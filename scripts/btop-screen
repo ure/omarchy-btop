@@ -18,7 +18,9 @@ IF_RUNNING="focus"
 
 # Defaults; override any of these in ~/.config/btop/ure-btop.env
 DIM="0.7"          # how much to darken btop's light text, 1 = leave it alone
-ALPHA="0.85"       # terminal background opacity, 1 = opaque
+ALPHA=""           # terminal background opacity, 1 = opaque.
+                   # Empty means see-through over a wallpaper on wide screens,
+                   # opaque on regular monitors where windows sit behind it.
 FONT="JetBrainsMono Nerd Font"
 MAX_FONT_SIZE="9"  # never bigger than this, smaller only when btop's menus need it
 MIN_COLS="80"      # btop refuses to open its menus below 80x24
@@ -161,6 +163,10 @@ fi
 #? org.omarchy.btop-screen window rule in hypr/windows.lua.
 previous="$(jq -r '[.[] | select(.focused)][0].name' <<<"$monitors_json")"
 if [[ $monitor_name != "$previous" ]]; then hypr_focus_monitor "$monitor_name"; fi
+
+if [[ -z $ALPHA ]]; then
+  if [[ $LAYOUT == wide ]]; then ALPHA="0.85"; else ALPHA="1"; fi
+fi
 
 launch=(foot --app-id="$APP_ID"
   -o "font=$FONT:size=$font_size"

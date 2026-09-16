@@ -61,7 +61,7 @@ Defaults can be overridden in `~/.config/btop/ure-btop.env`:
 
 ```bash
 DIM=0.7            # how much to darken btop's light text, 1 = leave it alone
-ALPHA=0.85         # terminal background opacity, 1 = opaque
+ALPHA=             # background opacity; empty = see-through on wide screens, opaque elsewhere
 FONT="JetBrainsMono Nerd Font"
 MAX_FONT_SIZE=9    # never bigger than this
 BTOP_BIN=          # path to a specific btop build
