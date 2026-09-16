@@ -24,6 +24,10 @@ Item {
 
   //? Monitor name -> what a bar reserves at its top, in logical pixels
   property var reservedTop: ({})
+  property string focusedScreen: ""
+
+  readonly property string stateDir: Quickshell.env("HOME") + "/.local/state/ure-btop"
+  readonly property string stateFile: stateDir + "/state.json"
   //? Monitor name -> shown by hand, which beats the automatic pick either way
   property var overrides: ({})
 
@@ -90,6 +94,7 @@ Item {
             var monitor = monitors[i]
             var reserved = monitor.reserved || [0, 0, 0, 0]
             map[monitor.name] = reserved[1] || 0
+            if (monitor.focused) root.focusedScreen = monitor.name
           }
           root.reservedTop = map
         } catch (error) {
@@ -99,7 +104,34 @@ Item {
     }
   }
 
-  Component.onCompleted: reservedProc.running = true
+  //? The scrim the user picked, kept across restarts
+  Process {
+    id: loadState
+    command: ["cat", root.stateFile]
+    stdout: StdioCollector {
+      onStreamFinished: {
+        try {
+          var state = JSON.parse(this.text)
+          if (typeof state.scrim === "number") root.scrim = Math.max(0, Math.min(1, state.scrim))
+        } catch (error) {
+          //? No state yet, the default stands
+        }
+      }
+    }
+  }
+
+  Process { id: saveState }
+
+  function persist() {
+    saveState.command = ["sh", "-c",
+      "mkdir -p " + stateDir + " && printf '%s' '" + JSON.stringify({ scrim: scrim }) + "' > " + stateFile]
+    saveState.running = true
+  }
+
+  Component.onCompleted: {
+    reservedProc.running = true
+    loadState.running = true
+  }
 
   Timer {
     interval: 5000
@@ -124,6 +156,28 @@ Item {
     function hideBackground(screen: string): string {
       root.setShown(screen, false)
       return "ok"
+    }
+
+    function setScrim(value: string): string {
+      var wanted = parseFloat(value)
+      if (isNaN(wanted)) return "error: not a number"
+      root.scrim = Math.max(0, Math.min(1, wanted))
+      root.persist()
+      return "ok"
+    }
+
+    function status(): string {
+      var report = { scrim: root.scrim, screens: [] }
+      for (var i = 0; i < Quickshell.screens.length; i++) {
+        var screen = Quickshell.screens[i]
+        report.screens.push({
+          name: screen.name,
+          wide: root.isWide(screen),
+          shown: root.shows(screen),
+          focused: screen.name === root.focusedScreen
+        })
+      }
+      return JSON.stringify(report)
     }
   }
 
