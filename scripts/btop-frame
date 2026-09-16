@@ -73,7 +73,9 @@ set_opt() { #? key value
   if grep -q "^$1 = " "$conf"; then sed -i "s|^$1 = .*|$1 = $2|" "$conf"; else printf '%s = %s\n' "$1" "$2" >> "$conf"; fi
 }
 
+started_now=false
 if ! tmux has-session -t "$SESSION" 2>/dev/null; then
+  started_now=true
   #? A background btop must not save over the config while it runs, and it draws
   #? no background of its own so the wallpaper keeps showing.
   if "$BTOP" --default-config 2>/dev/null | grep -q '^wide_layout'; then
@@ -110,7 +112,13 @@ fi
 
 #? A session whose btop died renders as an empty pane for good, so drop it and
 #? let the next frame start a fresh one rather than showing nothing for ever.
-if [[ -z "$(tmux capture-pane -p -t "$SESSION" 2>/dev/null | tr -d '[:space:]')" ]]; then
+#? A session that just started has simply not drawn yet, so leave it be: killing
+#? it here would start it over on every frame and it would never draw at all.
+session_age=0
+created_at="$(tmux display-message -p -t "$SESSION" '#{session_created}' 2>/dev/null || echo 0)"
+[[ $created_at =~ ^[0-9]+$ && $created_at -gt 0 ]] && session_age=$(( $(date +%s) - created_at ))
+if ! $started_now && (( session_age > 5 )) \
+  && [[ -z "$(tmux capture-pane -p -t "$SESSION" 2>/dev/null | tr -d '[:space:]')" ]]; then
   tmux kill-session -t "$SESSION" 2>/dev/null || true
   exit 0
 fi
