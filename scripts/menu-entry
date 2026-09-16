@@ -14,7 +14,8 @@ from pathlib import Path
 
 MENU = Path.home() / ".config/omarchy/extensions/omarchy-menu.jsonc"
 LAUNCHER = Path(__file__).resolve().parent / "btop-screen"
-KEY = "apps.btop"
+KEY = "btop"          # root of the Omarchy menu
+OLD_KEYS = ["apps.btop"]  # earlier home of this row
 ENTRY = {
     "icon": "󰍛",
     "label": "btop",
@@ -62,9 +63,12 @@ def main():
         print("present" if KEY in entries else "absent")
         return
     if action == "add":
+        for key in OLD_KEYS:
+            entries.pop(key, None)
         entries[KEY] = ENTRY
     elif action == "remove":
-        entries.pop(KEY, None)
+        for key in [KEY, *OLD_KEYS]:
+            entries.pop(key, None)
     else:
         raise SystemExit(__doc__)
 
