@@ -2,7 +2,7 @@
   "schemaVersion": 1,
   "id": "ure.btop",
   "name": "btop screen",
-  "version": "1.4.0",
+  "version": "1.5.0",
   "author": "ure",
   "license": "MIT",
   "description": "btop filling a monitor: on the wallpaper as a background layer, or as a window, in a wide column layout on short wide screens like the Corsair Xeneon Edge",

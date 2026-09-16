@@ -38,11 +38,15 @@ And add the menu row:
 
 ## Use
 
-- **Bar icon:** click the 󰍛 icon for a small panel holding a switch for btop on the
-  wallpaper, a **transparency** slider for how much wallpaper shows through it, and a
-  button that opens btop as a window. Right click the icon opens the window straight
-  away. The switch acts on the wide short screen, falling back to the monitor under the
-  cursor only when no such screen is connected.
+- **Bar icon:** click the 󰍛 icon for a panel holding:
+  - **a switch per monitor**, so btop goes on the wallpaper of whichever screens you want
+    (the wide short ones are marked, and start out on)
+  - **a Top bar switch**, which hides or shows Omarchy's bar. Omarchy has no per-monitor
+    bar setting, so this covers every screen at once. With the bar gone the surfaces
+    take the whole screen, since nothing is reserved any more.
+  - **a transparency slider** for how much wallpaper shows through btop
+  - **Open as a window**, the same as right clicking the icon
+
   The transparency is remembered in `~/.local/state/ure-btop/state.json`. Right click opens btop as an ordinary window instead.
   Place the icon with `omarchy plugin enable ure.btop --section right`.
 - **On the wallpaper:** the plugin's service draws btop on a background layer surface,

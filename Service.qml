@@ -167,6 +167,8 @@ Item {
     }
 
     function status(): string {
+      //? Asked right after the bar was hidden or shown, so re-read the insets
+      if (!reservedProc.running) reservedProc.running = true
       var report = { scrim: root.scrim, screens: [] }
       for (var i = 0; i < Quickshell.screens.length; i++) {
         var screen = Quickshell.screens[i]

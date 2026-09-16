@@ -4,8 +4,9 @@ import Quickshell.Io
 import qs.Commons
 import qs.Ui
 
-// Bar icon and its popup: a switch for btop on the wallpaper, a slider for how
-// much of the wallpaper shows through it, and a way to open btop as a window.
+// Bar icon and its popup: a switch per monitor for btop on the wallpaper, a
+// switch for the top bar itself, a slider for how much wallpaper shows through,
+// and a button that opens btop as an ordinary window.
 Panel {
   id: root
   moduleName: "ure.btop"
@@ -14,26 +15,37 @@ Panel {
   readonly property string scripts: Quickshell.env("HOME") + "/.config/omarchy/plugins/ure.btop/scripts"
 
   property real transparency: 0.75   //? 1 = nothing behind the text, 0 = solid backing
-  property bool onWallpaper: false
-  property string targetScreen: ""
-  property bool targetIsWide: false
+  property var screens: []
+  property bool anyOnWallpaper: false
+  property bool barShown: true
 
   implicitWidth: button.implicitWidth
   implicitHeight: button.implicitHeight
 
   function refresh() {
     if (!statusProc.running) statusProc.running = true
+    if (!barStateProc.running) barStateProc.running = true
+  }
+
+  //? PanelSlider leaves snapping to the caller, so round to the step here
+  function snap(value) {
+    return Math.max(0, Math.min(1, Math.round(value / 0.05) * 0.05))
   }
 
   function applyTransparency(value) {
-    root.transparency = value
-    applyProc.command = ["omarchy-shell", "ure.btop", "setScrim", String(1 - value)]
+    root.transparency = snap(value)
+    applyProc.command = ["omarchy-shell", "ure.btop", "setScrim", String(1 - root.transparency)]
     applyProc.running = true
+  }
+
+  function run(command) {
+    actionProc.command = ["sh", "-c", command]
+    actionProc.running = true
   }
 
   onOpenedChanged: if (opened) refresh()
 
-  //? The service knows the scrim and which screens show btop
+  //? The service knows the scrim and which screens are showing btop
   Process {
     id: statusProc
     command: ["omarchy-shell", "ure.btop", "status"]
@@ -42,17 +54,12 @@ Panel {
         try {
           var status = JSON.parse(this.text)
           if (typeof status.scrim === "number") root.transparency = 1 - status.scrim
-          var screens = status.screens || []
-          var target = null
-          for (var i = 0; i < screens.length; i++) {
-            if (screens[i].wide) { target = screens[i]; break }
-            if (!target && screens[i].focused) target = screens[i]
+          root.screens = status.screens || []
+          var any = false
+          for (var i = 0; i < root.screens.length; i++) {
+            if (root.screens[i].shown) any = true
           }
-          if (target) {
-            root.targetScreen = target.name
-            root.targetIsWide = target.wide === true
-            root.onWallpaper = target.shown === true
-          }
+          root.anyOnWallpaper = any
         } catch (error) {
           console.warn("ure.btop: could not read status:", error)
         }
@@ -60,16 +67,34 @@ Panel {
     }
   }
 
+  //? Omarchy hides the bar with a flag file, so its absence means shown
+  Process {
+    id: barStateProc
+    command: ["sh", "-c", "test -f \"$HOME/.local/state/omarchy/toggles/bar-off\" && echo off || echo on"]
+    stdout: StdioCollector {
+      onStreamFinished: root.barShown = this.text.trim() === "on"
+    }
+  }
+
   Process { id: applyProc }
 
   Process {
     id: actionProc
-    onExited: Qt.callLater(root.refresh)
+    onExited: refreshTimer.restart()
   }
 
-  function run(command) {
-    actionProc.command = ["sh", "-c", command]
-    actionProc.running = true
+  //? Give the shell a moment to move the bar or a surface before reading back
+  Timer {
+    id: refreshTimer
+    interval: 400
+    onTriggered: root.refresh()
+  }
+
+  Timer {
+    interval: 2000
+    running: root.opened
+    repeat: true
+    onTriggered: root.refresh()
   }
 
   BarIconButton {
@@ -77,7 +102,7 @@ Panel {
     anchors.fill: parent
     bar: root.bar
     text: "󰍛"
-    active: root.onWallpaper
+    active: root.anyOnWallpaper
     tooltipText: "btop"
     onPressed: function(mouseButton) {
       if (mouseButton === Qt.RightButton) root.run(root.scripts + "/btop-screen")
@@ -92,7 +117,7 @@ Panel {
     bar: root.bar
     open: root.opened
     focusTarget: keyCatcher
-    contentWidth: panel.fittedContentWidth(Style.space(320))
+    contentWidth: panel.fittedContentWidth(Style.space(340))
     contentHeight: panel.fittedContentHeight(column.implicitHeight)
 
     PanelKeyCatcher {
@@ -106,36 +131,72 @@ Panel {
         anchors.left: parent.left
         anchors.right: parent.right
         anchors.top: parent.top
-        spacing: Style.space(12)
+        spacing: Style.space(10)
 
         PanelSectionHeader {
           width: parent.width
           foreground: root.barForeground
-          text: "On the wallpaper"
+          text: "btop on the wallpaper"
+        }
+
+        Repeater {
+          model: root.screens
+
+          Item {
+            required property var modelData
+
+            width: column.width
+            implicitHeight: Math.max(screenLabel.implicitHeight, screenSwitch.implicitHeight)
+
+            Text {
+              id: screenLabel
+              anchors.left: parent.left
+              anchors.verticalCenter: parent.verticalCenter
+              textFormat: Text.PlainText
+              text: modelData.name + (modelData.wide ? " · wide" : "")
+              color: root.barForeground
+              font.family: Style.font.family
+              font.pixelSize: Style.font.body
+            }
+
+            ToggleSwitch {
+              id: screenSwitch
+              anchors.right: parent.right
+              anchors.verticalCenter: parent.verticalCenter
+              foreground: root.barForeground
+              checked: modelData.shown === true
+              onToggled: root.run(root.scripts + "/btop-background toggle " + modelData.name)
+            }
+          }
+        }
+
+        PanelSeparator {
+          width: parent.width
+          foreground: root.barForeground
         }
 
         Item {
           width: parent.width
-          implicitHeight: Math.max(wallpaperLabel.implicitHeight, wallpaperSwitch.implicitHeight)
+          implicitHeight: Math.max(barLabel.implicitHeight, barSwitch.implicitHeight)
 
           Text {
-            id: wallpaperLabel
+            id: barLabel
             anchors.left: parent.left
             anchors.verticalCenter: parent.verticalCenter
             textFormat: Text.PlainText
-            text: root.targetScreen === "" ? "No screen" : root.targetScreen
+            text: "Top bar"
             color: root.barForeground
             font.family: Style.font.family
             font.pixelSize: Style.font.body
           }
 
           ToggleSwitch {
-            id: wallpaperSwitch
+            id: barSwitch
             anchors.right: parent.right
             anchors.verticalCenter: parent.verticalCenter
             foreground: root.barForeground
-            checked: root.onWallpaper
-            onToggled: root.run(root.scripts + "/btop-background toggle")
+            checked: root.barShown
+            onToggled: root.run("omarchy toggle bar")
           }
         }
 
@@ -153,7 +214,7 @@ Panel {
           maximum: 1
           step: 0.05
           value: root.transparency
-          onMoved: function(value) { root.transparency = value }
+          onMoved: function(value) { root.transparency = root.snap(value) }
           onReleased: function(value) { root.applyTransparency(value) }
         }
 
