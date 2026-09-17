@@ -5,7 +5,9 @@ monitor, choosing the layout from that monitor's shape.
 
 - **Wide, short screens** (a Corsair Xeneon Edge is 2560x720) get a column layout: cpu,
   memory/disks, network and processes side by side, each the full height of the screen.
-- **Regular monitors** get btop's normal stacked layout.
+  That layout is the one thing needing a patched btop — see
+  [The patched btop](#the-patched-btop-and-when-you-need-it).
+- **Regular monitors** get btop's normal stacked layout, with the btop you already have.
 - The window covers the monitor with no border, the background is see-through so the
   wallpaper shows, and btop's light text is dimmed to stay easy on the eyes.
 - The font is shrunk only as far as needed to keep btop's menus usable, which need at
@@ -20,13 +22,60 @@ All of these come from your distribution; the plugin installs none of them for y
 | Everything | Omarchy (Quattro) with Hyprland and `omarchy-shell`, `jq`, `awk`, `hyprctl` |
 | The window mode | `foot` |
 | The wallpaper mode | `tmux`, `python3` |
-| `scripts/btop-build` | `git`, `make`, a C++ compiler, and btop's own build dependencies |
+| `scripts/btop-build`, only for the column layout | `git`, `make`, a C++ compiler, and btop's own build dependencies |
 
-The column layout needs a btop that has the `wide_layout` option, which no distribution
-ships. `scripts/btop-build` fetches btop at one pinned commit, builds it, and installs it
-under `~/.local/share/ure.btop`, leaving the system btop alone; without that build the
-plugin falls back to btop's stacked layout. The change itself is
-`patches/wide-layout.patch`, against [ure/btop](https://github.com/ure/btop/tree/wide-layout).
+## The patched btop, and when you need it
+
+**Most people do not need this.** On an ordinary monitor the plugin uses whatever btop
+your distribution ships and draws its normal stacked layout. Everything else — the
+wallpaper surface, the window, the bar panel, the menu row — works with the stock btop.
+
+The **column layout is the exception**. It exists for a short, wide screen such as the
+Corsair Xeneon Edge (2560x720), where the stacked layout leaves most of the strip empty,
+and it comes from a `wide_layout` option that upstream btop does not have and no
+distribution ships. So a screen like that needs a btop built from the patch.
+
+Whichever way you get it, the plugin looks for a btop in this order: `BTOP_BIN` from
+`~/.config/btop/ure-btop.env`, then `~/.local/share/ure.btop/bin/btop`, then `btop` on
+your `PATH`. If none of them has `wide_layout`, it says so once and uses the stacked
+layout instead.
+
+### The easy way
+
+```bash
+~/.config/omarchy/plugins/ure.btop/scripts/btop-build
+```
+
+It fetches [ure/btop](https://github.com/ure/btop/tree/wide-layout) at one pinned commit,
+builds it, and installs it under `~/.local/share/ure.btop`. Your system btop is never
+touched or replaced. `--status` says what is installed, `--force` rebuilds, and the
+build takes a couple of minutes.
+
+### Building it yourself
+
+The same thing by hand, if you would rather see every step:
+
+```bash
+git clone https://github.com/ure/btop.git
+cd btop
+git checkout wide-layout
+make -j"$(nproc)"
+make install PREFIX="$HOME/.local/share/ure.btop"
+```
+
+### Patching your own btop
+
+`patches/wide-layout.patch` is the change on its own — five files, no dependencies — if
+you would rather apply it to your own btop checkout or send it somewhere:
+
+```bash
+cd your-btop-checkout
+git apply /path/to/omarchy-btop/patches/wide-layout.patch
+make -j"$(nproc)"
+```
+
+Then point the plugin at the result by putting `BTOP_BIN=/path/to/your/btop` in
+`~/.config/btop/ure-btop.env`.
 
 ## Install
 
@@ -34,7 +83,9 @@ plugin falls back to btop's stacked layout. The change itself is
 omarchy plugin add https://github.com/ure/omarchy-btop.git --enable --yes
 ```
 
-Build the btop that has the column layout (skip it to stay on btop's stacked layout):
+Only for a short wide screen, build the btop that has the column layout (see
+[The patched btop](#the-patched-btop-and-when-you-need-it); skip it on an ordinary
+monitor and btop's stacked layout is used):
 
 ```bash
 ~/.config/omarchy/plugins/ure.btop/scripts/btop-build
