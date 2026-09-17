@@ -58,10 +58,14 @@ The same thing by hand, if you would rather see every step:
 ```bash
 git clone https://github.com/ure/btop.git
 cd btop
-git checkout wide-layout
-make -j"$(nproc)"
-make install PREFIX="$HOME/.local/share/ure.btop"
+git checkout --detach f1591d95939cf15f94f4789c7f27e6708670cb06 \
+  && make -j"$(nproc)" \
+  && make install PREFIX="$HOME/.local/share/ure.btop"
 ```
+
+That is the same commit `btop-build` uses. Checking out the commit rather than the
+`wide-layout` branch means you build the source you just read, even if the branch moves
+later.
 
 ### Patching your own btop
 
